@@ -1,0 +1,6 @@
+{
+  "name": "Hall of Kings & Times",
+  "description": "پلتفرم خصوصی اشتراک‌گذاری و استریم لایو گروه Hall of Kings به همراه بخش‌های تالار نمایش و تالار زمان با سیستم تایید حساب کاربری توسط مدیر",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
