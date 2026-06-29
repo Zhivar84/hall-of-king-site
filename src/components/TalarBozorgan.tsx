@@ -3,7 +3,7 @@ import { User, ChatMessage, Quote } from "../types";
 import { 
   ArrowLeft, Send, Search, Users, User as UserIcon, MessageSquare, 
   Smile, Image as ImageIcon, ShieldAlert, Sparkles, MessageCircle,
-  Quote as QuoteIcon, Trash2, PlusCircle
+  Quote as QuoteIcon, Trash2, PlusCircle, Reply
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -42,6 +42,12 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
   const [isSubmittingGif, setIsSubmittingGif] = useState<boolean>(false);
   const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
   const [deletingGifId, setDeletingGifId] = useState<string | null>(null);
+
+  // New states for Reply and Local GIF Upload
+  const [replyMessage, setReplyMessage] = useState<ChatMessage | null>(null);
+  const [gifSourceType, setGifSourceType] = useState<"url" | "file">("file");
+  const [localGifFile, setLocalGifFile] = useState<File | null>(null);
+  const [localGifBase64, setLocalGifBase64] = useState<string>("");
 
   const loadGifs = async () => {
     try {
@@ -95,22 +101,61 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
 
   const handleAddGifSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGifUrl.trim() || !newGifName.trim() || isSubmittingGif) return;
+    if (!newGifName.trim() || isSubmittingGif) return;
 
-    if (!newGifUrl.trim().startsWith("http")) {
-      setGifSubmitError("آدرس گیف باید با http:// یا https:// شروع شود.");
-      return;
-    }
+    let finalGifUrl = "";
 
     try {
       setIsSubmittingGif(true);
       setGifSubmitError("");
 
+      if (gifSourceType === "file") {
+        if (!localGifBase64) {
+          setGifSubmitError("لطفا ابتدا یک فایل گیف انتخاب کنید.");
+          setIsSubmittingGif(false);
+          return;
+        }
+
+        // 1. Upload local GIF
+        const uploadRes = await fetch("/api/upload-media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: localGifFile?.name || "uploaded.gif",
+            fileData: localGifBase64
+          })
+        });
+
+        if (!uploadRes.ok) {
+          const errData = await uploadRes.json();
+          setGifSubmitError(errData.error || "خطا در آپلود فایل گیف به سرور.");
+          setIsSubmittingGif(false);
+          return;
+        }
+
+        const uploadData = await uploadRes.json();
+        finalGifUrl = uploadData.url;
+      } else {
+        // Source is URL
+        if (!newGifUrl.trim()) {
+          setGifSubmitError("لطفا آدرس اینترنتی گیف را وارد کنید.");
+          setIsSubmittingGif(false);
+          return;
+        }
+        if (!newGifUrl.trim().startsWith("http")) {
+          setGifSubmitError("آدرس گیف باید با http:// یا https:// شروع شود.");
+          setIsSubmittingGif(false);
+          return;
+        }
+        finalGifUrl = newGifUrl.trim();
+      }
+
+      // 2. Submit to shared registry
       const res = await fetch("/api/gifs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: newGifUrl.trim(),
+          url: finalGifUrl,
           name: newGifName.trim(),
           addedBy: currentUser.username
         })
@@ -121,6 +166,8 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
         setSharedGifs(prev => [...prev, newGif]);
         setNewGifUrl("");
         setNewGifName("");
+        setLocalGifFile(null);
+        setLocalGifBase64("");
         setShowAddGifForm(false);
       } else {
         const data = await res.json();
@@ -224,7 +271,10 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
         userId: currentUser.id,
         username: currentUser.username,
         text: inputText.trim(),
-        type: "bozorgan"
+        type: "bozorgan",
+        replyToId: replyMessage?.id,
+        replyToUser: replyMessage?.username,
+        replyToText: isGifUrl(replyMessage?.text || "") ? "تصویر متحرک (GIF)" : replyMessage?.text
       };
 
       const res = await fetch("/api/chat", {
@@ -237,6 +287,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
         const newMsg = await res.json();
         setMessages(prev => [...prev, newMsg]);
         setInputText("");
+        setReplyMessage(null);
       }
     } catch (err) {
       console.error(err);
@@ -306,7 +357,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
 
   return (
     <>
-      <div className="min-h-screen bg-[#070609] text-[#f3f4f6] font-sans flex flex-col justify-between h-screen overflow-hidden">
+      <div className="min-h-screen bg-[#070609] text-[#f3f4f6] font-sans flex flex-col justify-between h-screen overflow-hidden pt-8">
       
       {/* Header Bar */}
       <div className="bg-zinc-950/90 backdrop-blur-md border-b border-zinc-900/80 px-4 py-3 md:px-8 flex items-center justify-between shadow-md shrink-0">
@@ -465,7 +516,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
           </div>
 
           {/* Messages container scrollable */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 bg-gradient-to-b from-[#08070b] to-[#040406]">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-gradient-to-b from-[#08070b] to-[#040406]">
             {loading ? (
               <div className="text-center text-zinc-500 text-xs py-10">در حال بارگذاری پیام‌ها...</div>
             ) : filteredMessages.length === 0 ? (
@@ -486,69 +537,114 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ duration: 0.25, ease: "easeOut" }}
                       layout
-                      className={`flex items-start gap-2.5 max-w-[85%] md:max-w-[70%] ${
-                        isMe ? "ml-auto flex-row" : "mr-auto flex-row"
-                      }`}
+                      className={`flex items-center gap-2 group/msg w-full ${isMe ? "justify-end" : "justify-start"}`}
                     >
-                      
-                      {/* Avatar for others */}
-                      {!isMe && (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 border border-indigo-700/30 flex items-center justify-center text-xs text-white font-extrabold shrink-0 shadow">
-                          {getInitials(msg.username)}
-                        </div>
+                      {/* Reply button on the left of my message */}
+                      {isMe && (
+                        <button
+                          onClick={() => setReplyMessage(msg)}
+                          className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1.5 hover:bg-zinc-900/80 rounded-lg text-zinc-500 hover:text-indigo-400 cursor-pointer text-[10px] flex items-center gap-1 shrink-0"
+                          title="پاسخ به این پیام"
+                        >
+                          <Reply className="w-3.5 h-3.5" />
+                          <span className="hidden md:inline font-bold">پاسخ</span>
+                        </button>
                       )}
 
-                      {/* Bubble Content */}
-                      <div className="space-y-1">
+                      <div className={`flex items-start gap-3 max-w-[80%] md:max-w-[65%] ${isMe ? "flex-row" : "flex-row"}`}>
                         
-                        {/* Name of sender */}
+                        {/* Avatar for others */}
                         {!isMe && (
-                          <span className="block text-[10px] font-bold text-indigo-400 text-right pr-1">
-                            {msg.username}
-                          </span>
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 border border-indigo-500/30 flex items-center justify-center text-xs text-white font-extrabold shrink-0 shadow-lg">
+                            {getInitials(msg.username)}
+                          </div>
                         )}
 
-                        {/* Chat box / GIF display */}
-                        {isGif ? (
-                          <div className="relative rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 p-1 shadow-lg group">
-                            <img
-                              src={msg.text.trim()}
-                              alt="GIF"
-                              className="max-h-48 md:max-h-60 object-contain rounded-xl max-w-full"
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className="absolute bottom-1.5 right-2 bg-black/70 backdrop-blur-md text-[8px] px-1.5 py-0.5 rounded-full font-bold text-zinc-400">
-                              GIF
+                        {/* Bubble Content */}
+                        <div className="space-y-1 text-right">
+                          
+                          {/* Name of sender */}
+                          {!isMe && (
+                            <span className="block text-[11px] font-extrabold text-indigo-400 text-right pr-1">
+                              {msg.username}
+                            </span>
+                          )}
+
+                          {/* Chat box / GIF display */}
+                          {isGif ? (
+                            <div className="relative rounded-2xl overflow-hidden border border-zinc-800/80 bg-zinc-950 p-1.5 shadow-xl group">
+                              {/* Reply Preview inside GIF */}
+                              {msg.replyToUser && (
+                                <div className="mb-1.5 text-right border-r-2 border-indigo-500 bg-zinc-900/85 px-2.5 py-1 rounded-lg text-[9px] text-zinc-300 max-w-xs truncate">
+                                  <span className="font-extrabold text-indigo-400 block text-[8px]">در پاسخ به {msg.replyToUser}</span>
+                                  <span>{msg.replyToText}</span>
+                                </div>
+                              )}
+
+                              <img
+                                src={msg.text.trim()}
+                                alt="GIF"
+                                className="max-h-52 md:max-h-64 object-contain rounded-xl max-w-full"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute bottom-2 right-2.5 bg-black/75 backdrop-blur-md text-[8px] px-2 py-0.5 rounded-full font-bold text-zinc-400">
+                                GIF
+                              </div>
+                              <span className="absolute bottom-2 left-2.5 bg-black/75 backdrop-blur-md text-[8px] px-2 py-0.5 rounded-full font-mono text-zinc-400">
+                                {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
+                              </span>
                             </div>
-                            <span className="absolute bottom-1.5 left-2 bg-black/70 backdrop-blur-md text-[8px] px-1.5 py-0.5 rounded-full font-mono text-zinc-400">
-                              {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                        ) : (
-                          /* Chat text box */
-                          <div
-                            className={`p-3 rounded-2xl shadow-lg relative leading-relaxed text-xs text-right break-words ${
-                              isMe
-                                ? "bg-indigo-600 text-white rounded-tr-none"
-                                : "bg-zinc-900 text-zinc-100 border border-zinc-800 rounded-tl-none"
-                            }`}
-                          >
-                            <p>{msg.text}</p>
-                            
-                            {/* Timestamp */}
-                            <span className={`block text-[8px] mt-1.5 font-mono text-left ${isMe ? "text-indigo-200" : "text-zinc-500"}`}>
-                              {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                          ) : (
+                            /* Chat text box */
+                            <div
+                              className={`p-3.5 rounded-2xl shadow-xl relative leading-relaxed text-xs text-right break-words border transition-colors ${
+                                isMe
+                                  ? "bg-gradient-to-br from-indigo-600 to-purple-600 text-white border-indigo-500/20 rounded-tr-none"
+                                  : "bg-zinc-900 text-zinc-100 border-zinc-800/80 rounded-tl-none"
+                              }`}
+                            >
+                              {/* Reply Preview inside Text Bubble */}
+                              {msg.replyToUser && (
+                                <div className={`mb-2 text-right border-r-2 px-2.5 py-1 rounded-lg text-[10px] max-w-md truncate ${
+                                  isMe 
+                                    ? "border-indigo-300 bg-black/30 text-zinc-200" 
+                                    : "border-indigo-500 bg-zinc-950/50 text-zinc-400"
+                                }`}>
+                                  <span className="font-extrabold block text-[9px] text-indigo-300">در پاسخ به {msg.replyToUser}</span>
+                                  <span>{msg.replyToText}</span>
+                                </div>
+                              )}
+
+                              <p className="whitespace-pre-wrap">{msg.text}</p>
+                              
+                              {/* Timestamp */}
+                              <span className={`block text-[8px] mt-2 font-mono text-left ${isMe ? "text-indigo-200" : "text-zinc-500"}`}>
+                                {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          )}
+
+                        </div>
+
+                        {/* Avatar for me */}
+                        {isMe && (
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 border border-indigo-500/30 flex items-center justify-center text-xs text-white font-extrabold shrink-0 shadow-lg">
+                            {getInitials(msg.username)}
                           </div>
                         )}
 
                       </div>
 
-                      {/* Avatar for me */}
-                      {isMe && (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 border border-indigo-700/30 flex items-center justify-center text-xs text-white font-extrabold shrink-0 shadow">
-                          {getInitials(msg.username)}
-                        </div>
+                      {/* Reply button on the right of other's message */}
+                      {!isMe && (
+                        <button
+                          onClick={() => setReplyMessage(msg)}
+                          className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1.5 hover:bg-zinc-900/80 rounded-lg text-zinc-500 hover:text-indigo-400 cursor-pointer text-[10px] flex items-center gap-1 shrink-0"
+                          title="پاسخ به این پیام"
+                        >
+                          <span className="hidden md:inline font-bold">پاسخ</span>
+                          <Reply className="w-3.5 h-3.5" />
+                        </button>
                       )}
 
                     </motion.div>
@@ -588,7 +684,33 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
                   {/* Add New GIF Form */}
                   {showAddGifForm ? (
                     <form onSubmit={handleAddGifSubmit} className="bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-900 space-y-3">
-                      <h4 className="text-[11px] font-bold text-zinc-300">افزودن گیف سفارشی برای استفاده همگان</h4>
+                      <div className="flex justify-between items-center border-b border-zinc-900 pb-2 mb-2">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setGifSourceType("file")}
+                            className={`text-[10px] px-3 py-1 rounded-lg transition-all font-bold cursor-pointer ${
+                              gifSourceType === "file"
+                                ? "bg-amber-600/30 border border-amber-600/40 text-amber-300 font-extrabold"
+                                : "bg-zinc-950 border border-zinc-900 text-zinc-500 hover:text-zinc-300"
+                            }`}
+                          >
+                            آپلود فایل گیف
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setGifSourceType("url")}
+                            className={`text-[10px] px-3 py-1 rounded-lg transition-all font-bold cursor-pointer ${
+                              gifSourceType === "url"
+                                ? "bg-amber-600/30 border border-amber-600/40 text-amber-300 font-extrabold"
+                                : "bg-zinc-950 border border-zinc-900 text-zinc-500 hover:text-zinc-300"
+                            }`}
+                          >
+                            لینک اینترنتی گیف
+                          </button>
+                        </div>
+                        <h4 className="text-[11px] font-bold text-zinc-300">افزودن گیف سفارشی برای استفاده همگان</h4>
+                      </div>
                       
                       {gifSubmitError && (
                         <div className="bg-rose-950/30 border border-rose-900/40 text-rose-300 text-[10px] py-2 px-3 rounded-xl">
@@ -597,18 +719,49 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
                       )}
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="block text-[10px] text-zinc-500 text-right">آدرس اینترنتی گیف (GIF URL)</label>
-                          <input
-                            type="url"
-                            required
-                            placeholder="https://example.com/anime.gif"
-                            value={newGifUrl}
-                            onChange={(e) => setNewGifUrl(e.target.value)}
-                            className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-2 px-3 text-xs text-white text-left focus:outline-none focus:border-amber-600 font-mono"
-                            dir="ltr"
-                          />
-                        </div>
+                        {gifSourceType === "file" ? (
+                          <div className="space-y-1">
+                            <label className="block text-[10px] text-zinc-500 text-right">آپلود فایل گیف از دستگاه (حداکثر ۱۰ مگابایت)</label>
+                            <input
+                              type="file"
+                              accept="image/gif"
+                              required={!localGifBase64}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  if (file.size > 10 * 1024 * 1024) {
+                                    setGifSubmitError("حجم فایل گیف نباید بیشتر از ۱۰ مگابایت باشد.");
+                                    return;
+                                  }
+                                  setGifSubmitError("");
+                                  setLocalGifFile(file);
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    setLocalGifBase64(reader.result as string);
+                                    if (!newGifName) {
+                                      setNewGifName(file.name.replace(/\.[^/.]+$/, ""));
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                              className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-1.5 px-3 text-xs text-white text-right focus:outline-none focus:border-amber-600 file:bg-zinc-800 file:text-zinc-300 file:border-0 file:rounded-lg file:px-2.5 file:py-1 file:ml-2 file:cursor-pointer"
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <label className="block text-[10px] text-zinc-500 text-right">آدرس اینترنتی گیف (GIF URL)</label>
+                            <input
+                              type="url"
+                              required
+                              placeholder="https://example.com/anime.gif"
+                              value={newGifUrl}
+                              onChange={(e) => setNewGifUrl(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-2 px-3 text-xs text-white text-left focus:outline-none focus:border-amber-600 font-mono"
+                              dir="ltr"
+                            />
+                          </div>
+                        )}
                         <div className="space-y-1">
                           <label className="block text-[10px] text-zinc-500 text-right">نام یا هشتگ گیف</label>
                           <input
@@ -628,7 +781,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
                           disabled={isSubmittingGif}
                           className="bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 text-xs font-bold text-white py-2 px-6 rounded-xl cursor-pointer"
                         >
-                          {isSubmittingGif ? "در حال ثبت..." : "افزودن به لیست عمومی"}
+                          {isSubmittingGif ? "در حال ثبت و آپلود..." : "افزودن به لیست عمومی"}
                         </button>
                       </div>
                     </form>
@@ -711,6 +864,27 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
 
           {/* Bottom input area */}
           <div className="bg-zinc-950 border-t border-zinc-900/80 p-3 md:p-4 shrink-0">
+            {replyMessage && (
+              <div className="max-w-4xl mx-auto mb-2 bg-indigo-950/40 border border-indigo-900/50 rounded-xl px-3 py-2 flex items-center justify-between text-right" dir="rtl">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <Reply className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <div className="text-right overflow-hidden">
+                    <span className="block text-[10px] font-extrabold text-indigo-300">در حال پاسخ به {replyMessage.username}</span>
+                    <span className="block text-[10px] text-zinc-400 truncate max-w-lg">
+                      {isGifUrl(replyMessage.text) ? "تصویر متحرک (GIF)" : replyMessage.text}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplyMessage(null)}
+                  className="text-zinc-500 hover:text-white transition-colors text-xs font-bold p-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleSendMessage} className="flex gap-2 max-w-4xl mx-auto">
               
               {/* Send trigger */}

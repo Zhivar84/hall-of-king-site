@@ -13,8 +13,12 @@ interface MangaStreamProps {
 }
 
 export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
-  // Hall selection state: 'none', 'bozorg' (Discord voice), 'koochak' (YouTube-like stream)
-  const [selectedHall, setSelectedHall] = useState<'none' | 'bozorg' | 'koochak'>('none');
+  // Hall selection state: 'none', 'bozorg' (Discord voice), 'koochak'/'koochak2' (YouTube-like stream)
+  const [selectedHall, setSelectedHall] = useState<'none' | 'bozorg' | 'koochak' | 'koochak2'>('none');
+
+  const koochakMediaRecorderRef = useRef<any>(null);
+  const playedKoochakAudioChunksRef = useRef<Set<string>>(new Set());
+  const joinedKoochakTimeRef = useRef<number>(0);
 
   // --- TALAR KOOCHAK (YOUTUBE) STATE ---
   const [streamStatus, setStreamStatus] = useState<LiveStreamStatus & { quality?: string }>({
@@ -38,7 +42,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     setStreamQuality(quality);
     if (isLocalSharing) {
       try {
-        await fetch("/api/livestream", {
+        await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -304,13 +308,13 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   // Talar Koochak (YouTube style) loading & polling
   const loadKoochakData = async () => {
     try {
-      const streamRes = await fetch("/api/livestream");
+      const streamRes = await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream");
       if (streamRes.ok) {
         const status = await streamRes.json();
         setStreamStatus(status);
       }
       
-      const chatRes = await fetch("/api/chat?type=stream");
+      const chatRes = await fetch(selectedHall === 'koochak2' ? "/api/chat?type=stream2" : "/api/chat?type=stream");
       if (chatRes.ok) {
         const chatData = await chatRes.json();
         setKoochakChat(chatData.chat || []);
@@ -327,12 +331,26 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     if (isLocalSharing) return; // Streamer doesn't need to fetch their own frame
     const start = Date.now();
     try {
-      const res = await fetch("/api/stream/frame");
+      const res = await fetch(selectedHall === 'koochak2' ? "/api/stream2/frame" : "/api/stream/frame");
       if (res.ok) {
         const data = await res.json();
         if (data.frame) {
           setLatestFrameSrc(data.frame);
           setViewerLatency(Date.now() - start);
+        }
+        
+        // Play audio chunks for Koochak/Koochak2
+        if (data.audioChunks && data.audioChunks.length > 0) {
+          data.audioChunks.forEach((chunk: any) => {
+            if (chunk.timestamp > joinedKoochakTimeRef.current - 1500 && !playedKoochakAudioChunksRef.current.has(chunk.id)) {
+              playedKoochakAudioChunksRef.current.add(chunk.id);
+              
+              const audio = new Audio(chunk.data);
+              audio.play().catch(e => {
+                console.warn(`Could not play koochak audio chunk:`, e);
+              });
+            }
+          });
         }
       } else {
         // No frame available or stream stopped
@@ -477,7 +495,11 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     let interval: NodeJS.Timeout;
     let bozorgPollInterval: NodeJS.Timeout;
     
-    if (selectedHall === 'koochak') {
+    if (selectedHall === 'koochak' || selectedHall === 'koochak2') {
+      // Initialize small hall audio chunk tracking
+      playedKoochakAudioChunksRef.current.clear();
+      joinedKoochakTimeRef.current = Date.now();
+
       loadKoochakData();
       interval = setInterval(loadKoochakData, 3000);
       
@@ -516,6 +538,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       stopBozorgMedia();
       if (koochakMediaStreamRef.current) {
         koochakMediaStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+      if (koochakMediaRecorderRef.current) {
+        try {
+          koochakMediaRecorderRef.current.stop();
+        } catch (e) {}
+        koochakMediaRecorderRef.current = null;
       }
     };
   }, []);
@@ -719,7 +747,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       setShowGoLiveModal(false);
 
       // Register live stream on server
-      await fetch("/api/livestream", {
+      await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -739,12 +767,59 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         body: JSON.stringify({
           userId: "system",
           username: "سیستم",
-          text: `📢 ${currentUser.username} پخش زنده جدیدی را با کیفیت ${
+          text: `📢 ${currentUser.username} پخش زنده جدیدی را در ${
+            selectedHall === 'koochak2' ? 'تالار کوچک ۲' : 'تالار کوچک ۱'
+          } با کیفیت ${
             streamQuality === 'high' ? 'بالا (1080p)' : streamQuality === 'low' ? 'کاهش‌یافته (360p)' : 'متوسط (720p)'
           } با عنوان «${titleToUse}» آغاز کرد!`,
-          type: "stream"
+          type: selectedHall === 'koochak2' ? "stream2" : "stream"
         })
       });
+
+      // Set up audio recording/uploading for livestream audio transmission
+      if (stream.getAudioTracks().length > 0) {
+        const audioOnlyStream = new MediaStream(stream.getAudioTracks());
+        let options = {};
+        if (typeof MediaRecorder !== "undefined") {
+          if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+            options = { mimeType: "audio/webm;codecs=opus" };
+          } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+            options = { mimeType: "audio/ogg;codecs=opus" };
+          }
+          try {
+            const recorder = new MediaRecorder(audioOnlyStream, options);
+            recorder.ondataavailable = async (event) => {
+              if (!event.data || event.data.size === 0) return;
+              const reader = new FileReader();
+              reader.onloadend = async () => {
+                const base64Data = reader.result as string;
+                if (!base64Data) return;
+                try {
+                  await fetch(selectedHall === 'koochak2' ? "/api/stream2/upload-audio" : "/api/stream/upload-audio", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      username: currentUser.username,
+                      chunk: {
+                        id: `${currentUser.username}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+                        data: base64Data,
+                        timestamp: Date.now()
+                      }
+                    })
+                  });
+                } catch (err) {
+                  console.warn("Failed uploading audio chunk for koochak stream:", err);
+                }
+              };
+              reader.readAsDataURL(event.data);
+            };
+            recorder.start(750); // Slice every 750ms for low latency
+            koochakMediaRecorderRef.current = recorder;
+          } catch (recErr) {
+            console.warn("Could not start MediaRecorder for koochak audio:", recErr);
+          }
+        }
+      }
 
       // Setup hidden canvas and frame capture loop
       const canvas = document.createElement("canvas");
@@ -770,40 +845,40 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       hiddenVideoRef.current = videoElement;
       
       videoElement.play().catch(e => console.warn("videoElement.play() failed/interrupted:", e));
-
+ 
       // Using willReadFrequently optimizes frequent readbacks (like calling toDataURL) in 2D canvas context
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
+ 
       let framesUploaded = 0;
       let lastFpsCheck = Date.now();
-
+ 
       const uploadFrame = async () => {
         // Stop if stream is closed or cleared
         if (!koochakMediaStreamRef.current) return;
-
+ 
         const activeSource = koochakVideoRef.current || videoElement;
         if (!ctx || !activeSource) {
           uploadIntervalRef.current = setTimeout(uploadFrame, 100) as any;
           return;
         }
-
+ 
         // Skip drawing if media is not fully loaded/ready (prevents black screen artifacts)
         if (activeSource.readyState < 2 || activeSource.videoWidth === 0) {
           uploadIntervalRef.current = setTimeout(uploadFrame, 100) as any;
           return;
         }
-
+ 
         if (activeSource.paused) {
           activeSource.play().catch(() => {});
         }
-
+ 
         // Configure resolution and delay dynamically based on live quality state
         const currentQuality = streamQualityRef.current;
         let targetWidth = 480;
         let targetHeight = 360;
         let jpegQuality = 0.5;
         let uploadIntervalMs = 400; // default medium (~2.5 FPS)
-
+ 
         if (currentQuality === "high") {
           targetWidth = 800;
           targetHeight = 600;
@@ -815,30 +890,30 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
           jpegQuality = 0.35;
           uploadIntervalMs = 650; // ~1.5 FPS
         }
-
+ 
         if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
           canvas.width = targetWidth;
           canvas.height = targetHeight;
         }
-
+ 
         try {
           const videoWidth = activeSource.videoWidth;
           const videoHeight = activeSource.videoHeight;
-
+ 
           if (videoWidth > 0 && videoHeight > 0) {
             // Fill background with black to avoid canvas leftovers
             ctx.fillStyle = "#000000";
             ctx.fillRect(0, 0, targetWidth, targetHeight);
-
+ 
             // Compute correct aspect ratio (fit style drawing)
             const srcRatio = videoWidth / videoHeight;
             const targetRatio = targetWidth / targetHeight;
-
+ 
             let drawWidth = targetWidth;
             let drawHeight = targetHeight;
             let drawX = 0;
             let drawY = 0;
-
+ 
             if (srcRatio > targetRatio) {
               drawHeight = targetWidth / srcRatio;
               drawY = (targetHeight - drawHeight) / 2;
@@ -846,7 +921,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               drawWidth = targetHeight * srcRatio;
               drawX = (targetWidth - drawWidth) / 2;
             }
-
+ 
             ctx.drawImage(activeSource, drawX, drawY, drawWidth, drawHeight);
           } else {
             ctx.drawImage(activeSource, 0, 0, targetWidth, targetHeight);
@@ -854,9 +929,9 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
           
           // Compress as JPEG string
           const base64Frame = canvas.toDataURL("image/jpeg", jpegQuality);
-
+ 
           // Upload to server
-          await fetch("/api/stream/upload-frame", {
+          await fetch(selectedHall === 'koochak2' ? "/api/stream2/upload-frame" : "/api/stream/upload-frame", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -922,6 +997,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       koochakMediaStreamRef.current.getTracks().forEach(t => t.stop());
       koochakMediaStreamRef.current = null;
     }
+    if (koochakMediaRecorderRef.current) {
+      try {
+        koochakMediaRecorderRef.current.stop();
+      } catch (e) {}
+      koochakMediaRecorderRef.current = null;
+    }
     setLocalStreamObject(null);
     if (koochakVideoRef.current) {
       koochakVideoRef.current.srcObject = null;
@@ -936,7 +1017,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     setFpsCounter(0);
 
     try {
-      await fetch("/api/livestream", {
+      await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isLive: false })
@@ -948,8 +1029,8 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         body: JSON.stringify({
           userId: "system",
           username: "سیستم",
-          text: `🛑 پخش زنده صفحه نمایش ${currentUser.username} به پایان رسید.`,
-          type: "stream"
+          text: `🛑 پخش زنده ${currentUser.username} به پایان رسید.`,
+          type: selectedHall === 'koochak2' ? "stream2" : "stream"
         })
       });
       loadKoochakData();
@@ -969,7 +1050,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
           userId: currentUser.id,
           username: currentUser.username,
           text: koochakInput.trim(),
-          type: "stream"
+          type: selectedHall === 'koochak2' ? "stream2" : "stream"
         })
       });
       if (res.ok) {
@@ -1129,7 +1210,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   // --- RENDERING VIEWS ---
 
   return (
-    <div className="min-h-screen bg-black text-[#f3f4f6] font-sans flex flex-col h-screen overflow-hidden select-none">
+    <div className="min-h-screen bg-black text-[#f3f4f6] font-sans flex flex-col h-[calc(100vh-32px)] overflow-hidden select-none">
       
       {/* Dynamic Navigation Header */}
       <div className="bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-900/60 sticky top-0 z-40 px-4 py-3 md:px-8 shadow-md shrink-0">
@@ -1145,7 +1226,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
           <div className="flex items-center gap-2">
             {selectedHall === 'bozorg' ? (
               <span className="text-xs bg-purple-950 text-purple-400 border border-purple-900/40 font-mono px-2 py-0.5 rounded font-bold uppercase">DISCORD STAGE</span>
-            ) : selectedHall === 'koochak' ? (
+            ) : selectedHall === 'koochak' || selectedHall === 'koochak2' ? (
               <span className="text-xs bg-rose-950 text-rose-400 border border-rose-900/40 font-mono px-2 py-0.5 rounded font-bold uppercase">SERVER RELAY LIVE</span>
             ) : (
               <span className="text-xs bg-zinc-800 text-zinc-400 font-mono px-2 py-0.5 rounded border border-zinc-700/50 font-bold uppercase">TALAR ROOM</span>
@@ -1154,7 +1235,9 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               {selectedHall === 'bozorg' ? (
                 <>تالار <span className="text-purple-400">بزرگ (دیسکوردی)</span></>
               ) : selectedHall === 'koochak' ? (
-                <>تالار <span className="text-red-400">کوچک (یوتیوبی)</span></>
+                <>تالار <span className="text-red-400">کوچک ۱ (یوتیوبی)</span></>
+              ) : selectedHall === 'koochak2' ? (
+                <>تالار <span className="text-red-400">کوچک ۲ (یوتیوبی)</span></>
               ) : (
                 <>تالار <span className="text-amber-500">نمایش</span></>
               )}
@@ -1174,7 +1257,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
               
               {/* Talar Bozorg Card */}
               <motion.div
@@ -1228,17 +1311,17 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                   <div className="space-y-1.5">
                     <h3 className="text-lg font-extrabold text-white flex items-center justify-end gap-2">
                       <span className="text-xs bg-rose-900/40 text-rose-300 px-2 py-0.5 rounded-md border border-rose-800/30">آپلود سرور و پخش همزمان</span>
-                      <span>تالار کوچک (یوتیوبی)</span>
+                      <span>تالار کوچک ۱ (یوتیوبی)</span>
                     </h3>
                     <p className="text-xs text-zinc-400 leading-relaxed">
-                      لایو استریم سنتی مانند یوتیوب. یک نفر پخش صفحه دسکتاپ خود را با کیفیت قابل تنظیم شروع کرده و فریم‌ها را به سرور آپلود می‌کند؛ سرور بلافاصله تصویر را بین همه تماشاگران پخش کرده و آن‌ها چت می‌کنند.
+                      لایو استریم سنتی مانند یوتیوب با سیستم صوتی همگام‌سازی شده. یک نفر پخش صفحه یا وب‌کم و صدای خود را با کیفیت دلخواه آغاز کرده و سرور آن را بین تماشاگران پخش می‌کند.
                     </p>
                   </div>
 
                   <div className="flex flex-wrap justify-end gap-1.5 pt-1">
                     <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">تنظیم کیفیت (360p, 720p, 1080p)</span>
-                    <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">آپلود مستقیم از سایت بدون OBS</span>
-                    <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">بدون P2P (انتقال با سرور)</span>
+                    <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">همگام‌سازی صوتی پیشرفته</span>
+                    <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">انتقال بدون P2P (رله کامل سروری)</span>
                   </div>
                 </div>
 
@@ -1246,7 +1329,44 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                   onClick={() => setSelectedHall('koochak')}
                   className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white rounded-xl cursor-pointer transition-all active:scale-[0.98] shadow-lg shadow-rose-950/50"
                 >
-                  ورود به تالار کوچک استریمی
+                  ورود به تالار کوچک ۱ استریمی
+                </button>
+              </motion.div>
+
+              {/* Talar Koochak 2 Card */}
+              <motion.div
+                whileHover={{ y: -4, scale: 1.01 }}
+                className="bg-gradient-to-br from-zinc-950 to-rose-950/20 border border-rose-900/30 rounded-3xl p-6 text-right flex flex-col justify-between space-y-6 relative overflow-hidden group shadow-xl"
+              >
+                <div className="absolute top-0 right-0 w-24 h-24 bg-rose-600/10 rounded-full blur-2xl group-hover:bg-rose-600/20 transition-all duration-500"></div>
+
+                <div className="space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-950/50 border border-rose-800/40 flex items-center justify-center text-rose-400 shadow-inner">
+                    <Radio className="w-6 h-6 animate-pulse" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-extrabold text-white flex items-center justify-end gap-2">
+                      <span className="text-xs bg-rose-900/40 text-rose-300 px-2 py-0.5 rounded-md border border-rose-800/30">اتاق دوم پخش همزمان</span>
+                      <span>تالار کوچک ۲ (یوتیوبی)</span>
+                    </h3>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      دومین اتاق مستقل پخش سنتی با سیستم صوتی همگام‌سازی شده. مناسب برای پخش موازی دیگر یا زمانی که تالار کوچک اول در حال استفاده و شلوغ است.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-1.5 pt-1">
+                    <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">تنظیم کیفیت (360p, 720p, 1080p)</span>
+                    <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">کانال مستقل صوتی سروری</span>
+                    <span className="text-[10px] bg-zinc-900 border border-rose-950/40 text-rose-300 px-2 py-1 rounded-lg">انتقال بدون P2P (رله کامل سروری)</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedHall('koochak2')}
+                  className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white rounded-xl cursor-pointer transition-all active:scale-[0.98] shadow-lg shadow-rose-950/50"
+                >
+                  ورود به تالار کوچک ۲ استریمی
                 </button>
               </motion.div>
 
@@ -1625,7 +1745,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
 
       {/* VIEW: TALAR KOOCHAK (YOUTUBE LIVE STREAM STYLE) */}
-      {selectedHall === 'koochak' && (
+      {(selectedHall === 'koochak' || selectedHall === 'koochak2') && (
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative bg-[#060408]">
           
           {/* Stream & Player side (Left) */}

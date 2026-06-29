@@ -76,7 +76,7 @@ export default function QuotesTicker() {
   if (!tickerText) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-8 bg-zinc-950/95 backdrop-blur-md border-t border-purple-900/30 flex items-center justify-between overflow-hidden z-50 select-none" dir="rtl">
+    <div className="fixed top-0 left-0 right-0 h-8 bg-zinc-950/95 backdrop-blur-md border-b border-purple-900/30 flex items-center justify-between overflow-hidden z-50 select-none" dir="rtl">
       {/* Styled Side Label Indicator */}
       <div className="h-full bg-purple-950/80 hover:bg-purple-900 text-purple-300 px-3.5 flex items-center gap-1.5 text-[11px] font-extrabold border-l border-purple-900/30 shadow-[rgba(0,0,0,0.5)_5px_0_15px] shrink-0 relative z-20">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />

@@ -22,8 +22,11 @@ interface ChatMessage {
   userId: string;
   username: string;
   text: string;
-  type: "stream" | "times" | "bozorgan";
+  type: "stream" | "stream2" | "times" | "bozorgan";
   createdAt: string;
+  replyToId?: string;
+  replyToUser?: string;
+  replyToText?: string;
 }
 
 interface Comment {
@@ -224,6 +227,17 @@ let inMemoryStreamChat: ChatMessage[] = [
   }
 ];
 
+let inMemoryStreamChat2: ChatMessage[] = [
+  {
+    id: "1",
+    userId: "system",
+    username: "سیستم",
+    text: "به تالار کوچک ۲ خوش آمدید! برای گفتگو با دوستان خود پیام ارسال کنید.",
+    type: "stream2",
+    createdAt: new Date().toISOString(),
+  }
+];
+
 // Help load/save DB safely
 async function getDb(): Promise<Database> {
   let db: Database;
@@ -242,7 +256,7 @@ async function getDb(): Promise<Database> {
   
   // Exclude stream chats from persistent database to comply with transient Talar-e Namayesh rules
   if (db.chat) {
-    db.chat = db.chat.filter(c => c.type !== "stream");
+    db.chat = db.chat.filter(c => c.type !== "stream" && c.type !== "stream2");
   } else {
     db.chat = [];
   }
@@ -253,7 +267,7 @@ async function getDb(): Promise<Database> {
 async function saveDb(db: Database): Promise<void> {
   // Always filter out "stream" type chat messages from database file
   if (db.chat) {
-    db.chat = db.chat.filter(c => c.type !== "stream");
+    db.chat = db.chat.filter(c => c.type !== "stream" && c.type !== "stream2");
   }
   
   await fs.writeFile(DB_FILE, JSON.stringify(db), "utf-8");
@@ -398,11 +412,14 @@ async function startServer() {
   // Chat APIs
   app.get("/api/chat", async (req, res) => {
     const { type } = req.query;
-    if (type !== "stream" && type !== "times" && type !== "bozorgan") {
+    if (type !== "stream" && type !== "stream2" && type !== "times" && type !== "bozorgan") {
       return res.status(400).json({ error: "نوع چت نامعتبر است." });
     }
     if (type === "stream") {
       return res.json({ chat: inMemoryStreamChat });
+    }
+    if (type === "stream2") {
+      return res.json({ chat: inMemoryStreamChat2 });
     }
     const db = await getDb();
     const filteredChat = db.chat.filter(c => c.type === type);
@@ -410,7 +427,7 @@ async function startServer() {
   });
 
   app.post("/api/chat", async (req, res) => {
-    const { userId, username, text, type } = req.body;
+    const { userId, username, text, type, replyToId, replyToUser, replyToText } = req.body;
     if (!text || !username || !type) {
       return res.status(400).json({ error: "ارسال تمامی فیلدها الزامی است." });
     }
@@ -422,6 +439,9 @@ async function startServer() {
       text,
       type,
       createdAt: new Date().toISOString(),
+      replyToId,
+      replyToUser,
+      replyToText
     };
 
     if (type === "stream") {
@@ -429,6 +449,15 @@ async function startServer() {
       // Limit to last 200 messages to save space
       if (inMemoryStreamChat.length > 200) {
         inMemoryStreamChat = inMemoryStreamChat.slice(-100);
+      }
+      return res.json(newMessage);
+    }
+
+    if (type === "stream2") {
+      inMemoryStreamChat2.push(newMessage);
+      // Limit to last 200 messages to save space
+      if (inMemoryStreamChat2.length > 200) {
+        inMemoryStreamChat2 = inMemoryStreamChat2.slice(-100);
       }
       return res.json(newMessage);
     }
@@ -766,12 +795,15 @@ async function startServer() {
     startedAt: string;
     quality: string;
     lastFrameTime: number;
+    audioChunks?: { id: string; data: string; timestamp: number }[];
   }
 
   interface InMemTalarState {
     bozorgParticipants: InMemParticipant[];
     liveStream: InMemLiveStream;
+    liveStream2: InMemLiveStream;
     latestFrame: string | null;
+    latestFrame2: string | null;
   }
 
   const talarState: InMemTalarState = {
@@ -784,9 +816,22 @@ async function startServer() {
       streamUrl: "",
       startedAt: "",
       quality: "medium",
-      lastFrameTime: 0
+      lastFrameTime: 0,
+      audioChunks: []
     },
-    latestFrame: null
+    liveStream2: {
+      isLive: false,
+      streamer: "",
+      title: "",
+      streamType: "webcam",
+      streamUrl: "",
+      startedAt: "",
+      quality: "medium",
+      lastFrameTime: 0,
+      audioChunks: []
+    },
+    latestFrame: null,
+    latestFrame2: null
   };
 
   function pruneInactiveTalarState() {
@@ -794,7 +839,7 @@ async function startServer() {
     // Prune voice participants inactive for more than 10 seconds (tab closed / left page)
     talarState.bozorgParticipants = talarState.bozorgParticipants.filter(p => (now - p.lastActive) < 10000);
 
-    // Prune live stream if streamer hasn't uploaded a frame in 45 seconds (streamer disconnected / closed tab)
+    // Prune live stream 1
     if (talarState.liveStream.isLive && (now - talarState.liveStream.lastFrameTime) > 45000) {
       talarState.liveStream = {
         isLive: false,
@@ -804,13 +849,30 @@ async function startServer() {
         streamUrl: "",
         startedAt: "",
         quality: "medium",
-        lastFrameTime: 0
+        lastFrameTime: 0,
+        audioChunks: []
       };
       talarState.latestFrame = null;
     }
+
+    // Prune live stream 2
+    if (talarState.liveStream2.isLive && (now - talarState.liveStream2.lastFrameTime) > 45000) {
+      talarState.liveStream2 = {
+        isLive: false,
+        streamer: "",
+        title: "",
+        streamType: "webcam",
+        streamUrl: "",
+        startedAt: "",
+        quality: "medium",
+        lastFrameTime: 0,
+        audioChunks: []
+      };
+      talarState.latestFrame2 = null;
+    }
   }
 
-  // Live Stream status APIs
+  // Live Stream status APIs (Stream 1)
   app.get("/api/livestream", (req, res) => {
     pruneInactiveTalarState();
     res.json(talarState.liveStream);
@@ -824,12 +886,13 @@ async function startServer() {
       talarState.liveStream = {
         isLive: true,
         streamer: streamer || "استریمر ناشناس",
-        title: title || "پخش زنده تالار کوچک",
+        title: title || "پخش زنده تالار کوچک ۱",
         streamType: streamType || "webcam",
         streamUrl: streamUrl || "",
         startedAt: new Date().toISOString(),
         quality: quality || "medium",
-        lastFrameTime: Date.now()
+        lastFrameTime: Date.now(),
+        audioChunks: talarState.liveStream.audioChunks || []
       };
     } else {
       talarState.liveStream = {
@@ -840,14 +903,54 @@ async function startServer() {
         streamUrl: "",
         startedAt: "",
         quality: "medium",
-        lastFrameTime: 0
+        lastFrameTime: 0,
+        audioChunks: []
       };
       talarState.latestFrame = null;
     }
     res.json(talarState.liveStream);
   });
 
-  // Server-side Frame distribution APIs for P2P-free streaming
+  // Live Stream status APIs (Stream 2)
+  app.get("/api/livestream2", (req, res) => {
+    pruneInactiveTalarState();
+    res.json(talarState.liveStream2);
+  });
+
+  app.post("/api/livestream2", (req, res) => {
+    const { isLive, streamer, title, streamType, streamUrl, quality } = req.body;
+    pruneInactiveTalarState();
+
+    if (isLive) {
+      talarState.liveStream2 = {
+        isLive: true,
+        streamer: streamer || "استریمر ناشناس",
+        title: title || "پخش زنده تالار کوچک ۲",
+        streamType: streamType || "webcam",
+        streamUrl: streamUrl || "",
+        startedAt: new Date().toISOString(),
+        quality: quality || "medium",
+        lastFrameTime: Date.now(),
+        audioChunks: talarState.liveStream2.audioChunks || []
+      };
+    } else {
+      talarState.liveStream2 = {
+        isLive: false,
+        streamer: "",
+        title: "",
+        streamType: "webcam",
+        streamUrl: "",
+        startedAt: "",
+        quality: "medium",
+        lastFrameTime: 0,
+        audioChunks: []
+      };
+      talarState.latestFrame2 = null;
+    }
+    res.json(talarState.liveStream2);
+  });
+
+  // Server-side Frame distribution APIs for P2P-free streaming (Stream 1)
   app.post("/api/stream/upload-frame", (req, res) => {
     const { frame, username } = req.body;
     if (!username) {
@@ -858,9 +961,6 @@ async function startServer() {
     const cleanUsername = username.trim().toLowerCase();
     const currentStreamer = talarState.liveStream.streamer ? talarState.liveStream.streamer.trim().toLowerCase() : "";
 
-    // Self-healing / Auto-adoption logic:
-    // If the server doesn't have an active streamer, or if the current frame is from the active streamer,
-    // we seamlessly maintain or restore the stream's live status.
     const isStreamerEmpty = !talarState.liveStream.streamer || currentStreamer === "";
     const isCurrentStreamer = currentStreamer === cleanUsername;
 
@@ -884,7 +984,79 @@ async function startServer() {
     if (!talarState.liveStream.isLive || !talarState.latestFrame) {
       return res.status(404).json({ error: "فریمی در دسترس نیست." });
     }
-    res.json({ frame: talarState.latestFrame });
+    res.json({ frame: talarState.latestFrame, audioChunks: talarState.liveStream.audioChunks || [] });
+  });
+
+  // Server-side Frame distribution APIs for P2P-free streaming (Stream 2)
+  app.post("/api/stream2/upload-frame", (req, res) => {
+    const { frame, username } = req.body;
+    if (!username) {
+      return res.status(400).json({ error: "نام کاربری الزامی است." });
+    }
+
+    const now = Date.now();
+    const cleanUsername = username.trim().toLowerCase();
+    const currentStreamer = talarState.liveStream2.streamer ? talarState.liveStream2.streamer.trim().toLowerCase() : "";
+
+    const isStreamerEmpty = !talarState.liveStream2.streamer || currentStreamer === "";
+    const isCurrentStreamer = currentStreamer === cleanUsername;
+
+    if (isCurrentStreamer || isStreamerEmpty) {
+      talarState.liveStream2.isLive = true;
+      if (isStreamerEmpty) {
+        talarState.liveStream2.streamer = username;
+        talarState.liveStream2.title = `پخش زنده ${username}`;
+        talarState.liveStream2.startedAt = new Date().toISOString();
+      }
+      talarState.latestFrame2 = frame || null;
+      talarState.liveStream2.lastFrameTime = now;
+      return res.json({ success: true });
+    }
+
+    res.status(403).json({ error: "شما دسترسی برای ارسال فریم ندارید یا پخش فعال نیست." });
+  });
+
+  app.get("/api/stream2/frame", (req, res) => {
+    pruneInactiveTalarState();
+    if (!talarState.liveStream2.isLive || !talarState.latestFrame2) {
+      return res.status(404).json({ error: "فریمی در دسترس نیست." });
+    }
+    res.json({ frame: talarState.latestFrame2, audioChunks: talarState.liveStream2.audioChunks || [] });
+  });
+
+  // Audio upload endpoints for Stream 1 & 2
+  app.post("/api/stream/upload-audio", (req, res) => {
+    const { username, chunk } = req.body;
+    if (!username || !chunk || !chunk.id || !chunk.data) {
+      return res.status(400).json({ error: "اطلاعات صوتی نامعتبر است." });
+    }
+    if (!talarState.liveStream.audioChunks) {
+      talarState.liveStream.audioChunks = [];
+    }
+    talarState.liveStream.audioChunks.push(chunk);
+    
+    // Retain only the last 8 audio chunks to avoid memory build-up and latency
+    if (talarState.liveStream.audioChunks.length > 8) {
+      talarState.liveStream.audioChunks = talarState.liveStream.audioChunks.slice(-8);
+    }
+    return res.json({ success: true });
+  });
+
+  app.post("/api/stream2/upload-audio", (req, res) => {
+    const { username, chunk } = req.body;
+    if (!username || !chunk || !chunk.id || !chunk.data) {
+      return res.status(400).json({ error: "اطلاعات صوتی نامعتبر است." });
+    }
+    if (!talarState.liveStream2.audioChunks) {
+      talarState.liveStream2.audioChunks = [];
+    }
+    talarState.liveStream2.audioChunks.push(chunk);
+    
+    // Retain only the last 8 audio chunks to avoid memory build-up and latency
+    if (talarState.liveStream2.audioChunks.length > 8) {
+      talarState.liveStream2.audioChunks = talarState.liveStream2.audioChunks.slice(-8);
+    }
+    return res.json({ success: true });
   });
 
   // Talar Bozorg (Discord-like Voice/Video Hall) APIs

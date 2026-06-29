@@ -19,8 +19,11 @@ export interface ChatMessage {
   userId: string;
   username: string;
   text: string;
-  type: "stream" | "times" | "bozorgan";
+  type: "stream" | "stream2" | "times" | "bozorgan";
   createdAt: string;
+  replyToId?: string;
+  replyToUser?: string;
+  replyToText?: string;
 }
 
 export interface Comment {

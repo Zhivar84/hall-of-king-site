@@ -53,7 +53,7 @@ export default function App() {
       {activeTab === "bozorgan" && <TalarBozorgan currentUser={user} onBack={() => setActiveTab("choice")} />}
 
       {activeTab === "choice" && (
-        <div className="min-h-screen bg-black text-[#f3f4f6] font-sans relative overflow-hidden flex flex-col justify-between selection:bg-purple-600/30 pb-10">
+        <div className="min-h-screen bg-black text-[#f3f4f6] font-sans relative overflow-hidden flex flex-col justify-between selection:bg-purple-600/30 pb-10 pt-8">
           
           {/* Decorative Blur Backdrops */}
           <div className="absolute top-[-25%] right-[-15%] w-[60vw] h-[60vw] rounded-full bg-purple-950/10 blur-[130px] animate-pulse pointer-events-none"></div>
