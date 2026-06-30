@@ -885,20 +885,22 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       setIsLocalSharing(true);
       setShowGoLiveModal(false);
 
-      if (livekitConfig?.isConfigured && livekitRoomRef.current) {
-        const room = livekitRoomRef.current;
-        const videoTrack = stream.getVideoTracks()[0];
-        const audioTrack = stream.getAudioTracks()[0];
-        
-        if (videoTrack) {
-          await room.localParticipant.publishTrack(videoTrack, {
-            name: streamSource === "webcam" ? "camera" : "screen_share",
-          });
-        }
-        if (audioTrack) {
-          await room.localParticipant.publishTrack(audioTrack, {
-            name: "microphone",
-          });
+      if (livekitConfig?.isConfigured) {
+        if (livekitRoomRef.current) {
+          const room = livekitRoomRef.current;
+          const videoTrack = stream.getVideoTracks()[0];
+          const audioTrack = stream.getAudioTracks()[0];
+          
+          if (videoTrack) {
+            await room.localParticipant.publishTrack(videoTrack, {
+              name: streamSource === "webcam" ? "camera" : "screen_share",
+            });
+          }
+          if (audioTrack) {
+            await room.localParticipant.publishTrack(audioTrack, {
+              name: "microphone",
+            });
+          }
         }
 
         // Register live stream on server

@@ -3,6 +3,9 @@ export interface User {
   username: string;
   role: "admin" | "user";
   status: "pending" | "approved" | "rejected";
+  avatarUrl?: string;
+  nickname?: string;
+  bio?: string;
 }
 
 export interface LiveStreamStatus {

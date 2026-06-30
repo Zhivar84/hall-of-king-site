@@ -16,6 +16,9 @@ interface User {
   role: "admin" | "user";
   status: "pending" | "approved" | "rejected";
   createdAt: string;
+  avatarUrl?: string;
+  nickname?: string;
+  bio?: string;
 }
 
 interface ChatMessage {
@@ -343,9 +346,60 @@ async function startServer() {
         id: user.id,
         username: user.username,
         role: user.role,
-        status: user.status
+        status: user.status,
+        avatarUrl: user.avatarUrl,
+        nickname: user.nickname,
+        bio: user.bio
       }
     });
+  });
+
+  // Update Profile Endpoint
+  app.post("/api/user/profile", async (req, res) => {
+    const { userId, avatarUrl, nickname, bio } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: "شناسه کاربر الزامی است." });
+    }
+
+    const db = await getDb();
+    const user = db.users.find(u => u.id === userId);
+    if (!user) {
+      return res.status(404).json({ error: "کاربر پیدا نشد." });
+    }
+
+    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+    if (nickname !== undefined) user.nickname = nickname;
+    if (bio !== undefined) user.bio = bio;
+
+    await saveDb(db);
+
+    res.json({
+      message: "پروفایل با موفقیت بروزرسانی شد.",
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        status: user.status,
+        avatarUrl: user.avatarUrl,
+        nickname: user.nickname,
+        bio: user.bio
+      }
+    });
+  });
+
+  // Public Users Endpoint (to map usernames to nicknames and avatars)
+  app.get("/api/users/public", async (req, res) => {
+    const db = await getDb();
+    const publicUsers = db.users
+      .filter(u => u.status === "approved")
+      .map(u => ({
+        id: u.id,
+        username: u.username,
+        nickname: u.nickname,
+        avatarUrl: u.avatarUrl,
+        bio: u.bio
+      }));
+    res.json({ users: publicUsers });
   });
 
   // Admin Manage Accounts (Admin Only check is performed in-client & simple header/token simulation is good)
