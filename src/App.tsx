@@ -8,7 +8,7 @@ import TalarFile from "./components/TalarFile";
 import TalarBozorgan from "./components/TalarBozorgan";
 import QuotesTicker from "./components/QuotesTicker";
 import ProfileModal from "./components/ProfileModal";
-import { LogOut, ShieldAlert, Sparkles, Tv, BookOpen, User as UserIcon, Flame, FolderOpen, Users, MessageSquare } from "lucide-react";
+import { LogOut, ShieldAlert, Sparkles, Tv, BookOpen, User as UserIcon, Flame, FolderOpen, Users, MessageSquare, Quote } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
@@ -132,13 +132,13 @@ export default function App() {
               <h2 className="text-2xl md:text-4xl font-black text-white tracking-tight">
                 کدام تالار را انتخاب می‌کنید؟
               </h2>
-              <p className="text-xs md:text-sm text-zinc-400 max-w-xl mx-auto leading-relaxed">
-                از بخش تالار نمایش برای پخش زنده صفحه نمایش، تالار زمان برای اشتراک‌گذاری فیلم و عکس، تالار فایل برای آپلود اسناد و تالار بزرگان برای چت گروهی صمیمی استفاده کنید.
+              <p className="text-xs md:text-sm text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+                از بخش تالار نمایش برای استریم، تالار زمان برای اشتراک‌گذاری فیلم و عکس، تالار فایل برای آپلود اسناد، و تالار بزرگان برای ثبت سخنان ماندگار و چت گروهی استفاده کنید.
               </p>
             </div>
 
             {/* Responsive grid with 4 choice triggers */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
               
               {/* TALAR NAMAYESH BUTTON */}
               <motion.div
@@ -157,8 +157,8 @@ export default function App() {
                     <span className="text-[10px] text-red-400 font-black tracking-widest font-mono uppercase">SCREEN SHARE & STREAM</span>
                     <h3 className="text-lg font-bold text-white mt-0.5 group-hover:text-red-300 transition-colors">تالار نمایش</h3>
                   </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
-                    پخش زنده و به اشتراک‌گذاری صفحه نمایش کامپیوتر با سایر اعضا در کنار گفتگوی همزمان و متنی در اتاق مخصوص.
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    پخش زنده و به اشتراک‌گذاری صفحه نمایش کامپیوتر با سایر اعضا در اتاق مخصوص.
                   </p>
                 </div>
 
@@ -188,8 +188,8 @@ export default function App() {
                     <span className="text-[10px] text-amber-400 font-black tracking-widest font-mono uppercase">VIDEO & PHOTO BOARD</span>
                     <h3 className="text-lg font-bold text-white mt-0.5 group-hover:text-amber-300 transition-colors">تالار زمان</h3>
                   </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
-                    محیط اشتراک‌گذاری ویدیوها و تصاویر دلخواه به همراه قابلیت ثبت نقدها، امتیازدهی، لایک و بخش دیدگاه‌های متنی.
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    محیط اشتراک‌گذاری ویدیوها و تصاویر دلخواه به همراه قابلیت ثبت دیدگاه‌های متنی.
                   </p>
                 </div>
 
@@ -219,8 +219,8 @@ export default function App() {
                     <span className="text-[10px] text-emerald-400 font-black tracking-widest font-mono uppercase">FILE ARCHIVE</span>
                     <h3 className="text-lg font-bold text-white mt-0.5 group-hover:text-emerald-300 transition-colors">تالار فایل</h3>
                   </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
-                    بارگذاری و دانلود فایل‌ها با لینک مستقیم تا سقف ۵۰ مگابایت. فضایی عالی برای به اشتراک‌گذاری اسناد، ویدیوها و ترجمه‌های گروهی.
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    بارگذاری و دانلود فایل‌ها با لینک مستقیم تا سقف ۵۰ مگابایت. فضایی عالی برای اشتراک‌گذاری اسناد.
                   </p>
                 </div>
 
@@ -240,27 +240,27 @@ export default function App() {
                 className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-72 cursor-pointer overflow-hidden text-right"
               >
                 {/* Background Light Accent */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/5 rounded-full blur-3xl group-hover:bg-indigo-600/10 transition-all"></div>
+                <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/5 rounded-full blur-3xl group-hover:bg-purple-600/10 transition-all"></div>
 
                 <div className="space-y-3.5 relative z-10">
-                  <div className="w-12 h-12 rounded-xl bg-indigo-950/40 border border-indigo-900/40 flex items-center justify-center text-indigo-400 shadow group-hover:scale-105 transition-transform duration-300">
-                    <Users className="w-6 h-6" />
+                  <div className="w-12 h-12 rounded-xl bg-purple-950/40 border border-purple-900/40 flex items-center justify-center text-purple-400 shadow group-hover:scale-105 transition-transform duration-300">
+                    <Quote className="w-6 h-6" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-indigo-400 font-black tracking-widest font-mono uppercase">TELEGRAM-LIKE CHAT</span>
-                    <h3 className="text-lg font-bold text-white mt-0.5 group-hover:text-indigo-300 transition-colors">تالار بزرگان</h3>
+                    <span className="text-[10px] text-purple-400 font-black tracking-widest font-mono uppercase">QUOTES & CHAT</span>
+                    <h3 className="text-lg font-bold text-white mt-0.5 group-hover:text-purple-300 transition-colors">تالار بزرگان</h3>
                   </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
-                    چت‌روم صمیمی و پرسرعت گروه شبیه به تلگرام. به همراه دوستان به گفتگو، فرستادن پیام بپردازید و در لحظه صحبت کنید.
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    بخش ویژه ثبت سخن بزرگان و گفتگوی متنی متمرکز اعضای تالار پادشاهان.
                   </p>
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60 relative z-10">
-                  <span className="text-xs font-bold text-indigo-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
+                  <span className="text-xs font-bold text-purple-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
                     <span>ورود به تالار بزرگان</span>
                     <span>←</span>
                   </span>
-                  <span className="text-[9px] bg-indigo-950/80 text-indigo-300 border border-indigo-850/40 px-2 py-0.5 rounded-full font-bold">گروه گفتگو</span>
+                  <span className="text-[9px] bg-purple-950/80 text-purple-300 border border-purple-850/40 px-2 py-0.5 rounded-full font-bold">سخن بزرگان و چت</span>
                 </div>
               </motion.div>
 

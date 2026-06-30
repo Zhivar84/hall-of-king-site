@@ -1,282 +1,124 @@
 import React, { useState, useEffect, useRef } from "react";
-import { User, ChatMessage, Quote } from "../types";
+import { User, ChatMessage } from "../types";
 import { 
-  ArrowLeft, Send, Search, Users, User as UserIcon, MessageSquare, 
-  Smile, Image as ImageIcon, ShieldAlert, Sparkles, MessageCircle,
-  Quote as QuoteIcon, Trash2, PlusCircle, Reply
+  ArrowLeft, Send, Sparkles, Trash2, MessageSquare, Quote, AlertCircle, CornerUpLeft, Image, X, Smile
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 
 interface TalarBozorganProps {
   currentUser: User;
   onBack: () => void;
 }
 
+interface QuoteType {
+  id: string;
+  text: string;
+  author: string;
+  submittedBy: string;
+  createdAt: string;
+}
+
+const PRESET_GIFS = [
+  { name: "خنده", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Bkbndub2l6czlyM2UwbHdrdjV4cWJ5MDlzZDJwNjJ6OXFwZnFmOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ohhwfWemR7g3AL77G/giphy.gif" },
+  { name: "کف زدن", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Bkbndub2l6czlyM2UwbHdrdjV4cWJ5MDlzZDJwNjJ6OXFwZnFmOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7qDQ4kcSD1PLM3BK/giphy.gif" },
+  { name: "شگفت‌زده", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Bkbndub2l6czlyM2UwbHdrdjV4cWJ5MDlzZDJwNjJ6OXFwZnFmOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26ufdipOdXMTeQQ4o/giphy.gif" },
+  { name: "گریه", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Bkbndub2l6czlyM2UwbHdrdjV4cWJ5MDlzZDJwNjJ6OXFwZnFmOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/KDRV3Qgh3p0hkAOg6z/giphy.gif" },
+  { name: "عالی", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Bkbndub2l6czlyM2UwbHdrdjV4cWJ5MDlzZDJwNjJ6OXFwZnFmOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/t3s3X2bVB8XNm/giphy.gif" },
+  { name: "موافقت", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Bkbndub2l6czlyM2UwbHdrdjV4cWJ5MDlzZDJwNjJ6OXFwZnFmOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/g9582DNuQppazNM459/giphy.gif" }
+];
+
 export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [quotes, setQuotes] = useState<QuoteType[]>([]);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState<string>("");
+  const [quoteText, setQuoteText] = useState<string>("");
+  const [quoteAuthor, setQuoteAuthor] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
-  const [inputText, setInputText] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [isSending, setIsSending] = useState<boolean>(false);
-  const [showMembers, setShowMembers] = useState<boolean>(false);
-  const [activeUsers, setActiveUsers] = useState<string[]>([]);
-  
-  // Quotes (Sokhan Bozorgan) states
-  const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [quotesLoading, setQuotesLoading] = useState<boolean>(true);
-  const [showQuotesMobile, setShowQuotesMobile] = useState<boolean>(false);
-  const [showAddQuote, setShowAddQuote] = useState<boolean>(false);
-  const [newQuoteText, setNewQuoteText] = useState<string>("");
-  const [newQuoteAuthor, setNewQuoteAuthor] = useState<string>("");
-  const [quoteError, setQuoteError] = useState<string>("");
-  const [isSubmittingQuote, setIsSubmittingQuote] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
-  // GIF Library states
-  const [showGifPanel, setShowGifPanel] = useState<boolean>(false);
-  const [sharedGifs, setSharedGifs] = useState<any[]>([]);
-  const [gifsLoading, setGifsLoading] = useState<boolean>(false);
-  const [showAddGifForm, setShowAddGifForm] = useState<boolean>(false);
-  const [newGifUrl, setNewGifUrl] = useState<string>("");
-  const [newGifName, setNewGifName] = useState<string>("");
-  const [gifSubmitError, setGifSubmitError] = useState<string>("");
-  const [isSubmittingGif, setIsSubmittingGif] = useState<boolean>(false);
-  const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
-  const [deletingGifId, setDeletingGifId] = useState<string | null>(null);
+  // Reply state
+  const [replyTo, setReplyTo] = useState<{ id: string; username: string; text: string } | null>(null);
 
-  // New states for Reply and Local GIF Upload
-  const [replyMessage, setReplyMessage] = useState<ChatMessage | null>(null);
-  const [gifSourceType, setGifSourceType] = useState<"url" | "file">("file");
-  const [localGifFile, setLocalGifFile] = useState<File | null>(null);
-  const [localGifBase64, setLocalGifBase64] = useState<string>("");
+  // GIF states
+  const [gifSelectorOpen, setGifSelectorOpen] = useState<boolean>(false);
+  const [uploadingGif, setUploadingGif] = useState<boolean>(false);
 
-  const loadGifs = async () => {
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const lastMsgIdRef = useRef<string | null>(null);
+
+  // Load all quotes and chat messages
+  const loadData = async () => {
     try {
-      setGifsLoading(true);
-      const res = await fetch("/api/gifs");
-      if (res.ok) {
-        const data = await res.json();
-        setSharedGifs(data.gifs || []);
+      // Fetch quotes
+      const quotesRes = await fetch("/api/quotes");
+      let currentQuotes: QuoteType[] = [];
+      if (quotesRes.ok) {
+        const quotesData = await quotesRes.json();
+        currentQuotes = quotesData.quotes || [];
+        setQuotes(currentQuotes);
+      }
+
+      // Fetch chat
+      const chatRes = await fetch("/api/chat?type=bozorgan");
+      if (chatRes.ok) {
+        const chatData = await chatRes.json();
+        setChat(chatData.chat || []);
       }
     } catch (err) {
-      console.error("Error loading GIFs:", err);
-    } finally {
-      setGifsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (showGifPanel) {
-      loadGifs();
-    }
-  }, [showGifPanel]);
-
-  const handleSelectGif = async (gifUrl: string) => {
-    if (isSending) return;
-    try {
-      setIsSending(true);
-      const payload = {
-        userId: currentUser.id,
-        username: currentUser.username,
-        text: gifUrl,
-        type: "bozorgan"
-      };
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (res.ok) {
-        const newMsg = await res.json();
-        setMessages(prev => [...prev, newMsg]);
-        setShowGifPanel(false);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const handleAddGifSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newGifName.trim() || isSubmittingGif) return;
-
-    let finalGifUrl = "";
-
-    try {
-      setIsSubmittingGif(true);
-      setGifSubmitError("");
-
-      if (gifSourceType === "file") {
-        if (!localGifBase64) {
-          setGifSubmitError("لطفا ابتدا یک فایل گیف انتخاب کنید.");
-          setIsSubmittingGif(false);
-          return;
-        }
-
-        // 1. Upload local GIF
-        const uploadRes = await fetch("/api/upload-media", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: localGifFile?.name || "uploaded.gif",
-            fileData: localGifBase64
-          })
-        });
-
-        if (!uploadRes.ok) {
-          const errData = await uploadRes.json();
-          setGifSubmitError(errData.error || "خطا در آپلود فایل گیف به سرور.");
-          setIsSubmittingGif(false);
-          return;
-        }
-
-        const uploadData = await uploadRes.json();
-        finalGifUrl = uploadData.url;
-      } else {
-        // Source is URL
-        if (!newGifUrl.trim()) {
-          setGifSubmitError("لطفا آدرس اینترنتی گیف را وارد کنید.");
-          setIsSubmittingGif(false);
-          return;
-        }
-        if (!newGifUrl.trim().startsWith("http")) {
-          setGifSubmitError("آدرس گیف باید با http:// یا https:// شروع شود.");
-          setIsSubmittingGif(false);
-          return;
-        }
-        finalGifUrl = newGifUrl.trim();
-      }
-
-      // 2. Submit to shared registry
-      const res = await fetch("/api/gifs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: finalGifUrl,
-          name: newGifName.trim(),
-          addedBy: currentUser.username
-        })
-      });
-
-      if (res.ok) {
-        const newGif = await res.json();
-        setSharedGifs(prev => [...prev, newGif]);
-        setNewGifUrl("");
-        setNewGifName("");
-        setLocalGifFile(null);
-        setLocalGifBase64("");
-        setShowAddGifForm(false);
-      } else {
-        const data = await res.json();
-        setGifSubmitError(data.error || "خطا در ثبت گیف جدید.");
-      }
-    } catch (err) {
-      console.error(err);
-      setGifSubmitError("خطا در برقراری ارتباط با سرور.");
-    } finally {
-      setIsSubmittingGif(false);
-    }
-  };
-
-  const handleDeleteGif = async (e: React.MouseEvent, gifId: string) => {
-    e.stopPropagation();
-
-    try {
-      const res = await fetch(`/api/gifs/${gifId}`, {
-        method: "DELETE"
-      });
-      if (res.ok) {
-        setSharedGifs(prev => prev.filter(g => g.id !== gifId));
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const isGifUrl = (text: string) => {
-    const cleaned = text.trim();
-    return (
-      cleaned.startsWith("http") && (
-        cleaned.toLowerCase().endsWith(".gif") || 
-        cleaned.includes("giphy.com/media/") ||
-        cleaned.includes("tenor.com/view") ||
-        cleaned.toLowerCase().includes(".gif?")
-      )
-    );
-  };
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Load chat messages
-  const loadMessages = async () => {
-    try {
-      const res = await fetch("/api/chat?type=bozorgan");
-      if (res.ok) {
-        const data = await res.json();
-        const chatMsgs = data.chat || [];
-        setMessages(chatMsgs);
-
-        // Extract active users in chat
-        const users = Array.from(new Set(chatMsgs.map((m: any) => m.username))) as string[];
-        setActiveUsers(users);
-      }
-    } catch (err) {
-      console.error("Error loading chat messages:", err);
+      console.warn("Error loading Talar Bozorgan data:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Load quotes from DB
-  const loadQuotes = async () => {
-    try {
-      const res = await fetch("/api/quotes");
-      if (res.ok) {
-        const data = await res.json();
-        setQuotes(data.quotes || []);
-      }
-    } catch (err) {
-      console.error("Error loading quotes:", err);
-    } finally {
-      setQuotesLoading(false);
-    }
-  };
-
-  // Poll for new messages and quotes every 4 seconds
+  // Poll for real-time updates
   useEffect(() => {
-    loadMessages();
-    loadQuotes();
-    const interval = setInterval(() => {
-      loadMessages();
-      loadQuotes();
-    }, 4000);
+    loadData();
+    const interval = setInterval(loadData, 2000);
     return () => clearInterval(interval);
   }, []);
 
-  // Scroll to bottom whenever messages load or are added
+  // Scroll to bottom of chat only when a genuine new message arrives
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (chat.length > 0) {
+      const latestMsg = chat[chat.length - 1];
+      if (latestMsg.id !== lastMsgIdRef.current) {
+        lastMsgIdRef.current = latestMsg.id;
+        const container = chatEndRef.current?.parentElement;
+        if (container) {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: "smooth"
+          });
+        }
+      }
+    }
+  }, [chat]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() || isSending) return;
+  const handleSendChat = async (e?: React.FormEvent, customText?: string) => {
+    if (e) e.preventDefault();
+    const textToSend = customText !== undefined ? customText : chatInput.trim();
+    if (!textToSend) return;
+
+    if (customText === undefined) {
+      setChatInput("");
+    }
+
+    const payload: any = {
+      userId: currentUser.id,
+      username: currentUser.username,
+      text: textToSend,
+      type: "bozorgan"
+    };
+
+    if (replyTo) {
+      payload.replyToId = replyTo.id;
+      payload.replyToUser = replyTo.username;
+      payload.replyToText = replyTo.text;
+      setReplyTo(null);
+    }
 
     try {
-      setIsSending(true);
-      const payload = {
-        userId: currentUser.id,
-        username: currentUser.username,
-        text: inputText.trim(),
-        type: "bozorgan",
-        replyToId: replyMessage?.id,
-        replyToUser: replyMessage?.username,
-        replyToText: isGifUrl(replyMessage?.text || "") ? "تصویر متحرک (GIF)" : replyMessage?.text
-      };
-
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -285,805 +127,468 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
 
       if (res.ok) {
         const newMsg = await res.json();
-        setMessages(prev => [...prev, newMsg]);
-        setInputText("");
-        setReplyMessage(null);
+        setChat(prev => [...prev, newMsg]);
       }
     } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSending(false);
+      console.error("Failed to send chat message:", err);
     }
   };
 
-  const getInitials = (name: string) => {
-    return name.slice(0, 2).toUpperCase();
-  };
+  // Handle GIF file upload
+  const handleGifUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const filteredMessages = messages.filter(msg =>
-    msg.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    msg.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    if (file.type !== "image/gif") {
+      alert("لطفاً فقط فایل با پسوند GIF آپلود کنید.");
+      return;
+    }
+
+    setUploadingGif(true);
+    setGifSelectorOpen(false);
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Data = reader.result as string;
+        const uploadRes = await fetch("/api/upload-media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            fileData: base64Data
+          })
+        });
+
+        if (uploadRes.ok) {
+          const data = await uploadRes.json();
+          if (data.url) {
+            // Send the uploaded GIF URL as a message
+            handleSendChat(undefined, data.url);
+          }
+        } else {
+          alert("آپلود گیف با خطا مواجه شد.");
+        }
+        setUploadingGif(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Failed to upload GIF file:", err);
+      setUploadingGif(false);
+    }
+  };
 
   const handleAddQuote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newQuoteText.trim() || !newQuoteAuthor.trim() || isSubmittingQuote) return;
+    if (!quoteText.trim() || !quoteAuthor.trim()) return;
+
+    setErrorMessage("");
 
     try {
-      setIsSubmittingQuote(true);
-      setQuoteError("");
-
       const res = await fetch("/api/quotes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: newQuoteText.trim(),
-          author: newQuoteAuthor.trim(),
-          submittedBy: currentUser.username
+          text: quoteText.trim(),
+          author: quoteAuthor.trim(),
+          submittedBy: currentUser.nickname || currentUser.username
         })
       });
 
       if (res.ok) {
-        const addedQuote = await res.json();
-        setQuotes(prev => [addedQuote, ...prev]);
-        setNewQuoteText("");
-        setNewQuoteAuthor("");
-        setShowAddQuote(false);
+        setQuoteText("");
+        setQuoteAuthor("");
+        // Instantly refresh quotes list
+        const quotesRes = await fetch("/api/quotes");
+        if (quotesRes.ok) {
+          const quotesData = await quotesRes.json();
+          setQuotes(quotesData.quotes || []);
+        }
       } else {
-        const errData = await res.json();
-        setQuoteError(errData.error || "خطایی رخ داد.");
+        setErrorMessage("ثبت سخن با خطا مواجه شد.");
       }
     } catch (err) {
-      console.error(err);
-      setQuoteError("ارتباط با سرور برقرار نشد.");
-    } finally {
-      setIsSubmittingQuote(false);
+      console.error("Failed to add quote:", err);
+      setErrorMessage("ارتباط با سرور برقرار نشد.");
     }
   };
 
-  const handleDeleteQuote = async (quoteId: string) => {
+  const handleDeleteQuote = async (id: string) => {
     try {
-      const res = await fetch(`/api/quotes/${quoteId}`, {
+      const res = await fetch(`/api/quotes/${id}`, {
         method: "DELETE"
       });
 
       if (res.ok) {
-        setQuotes(prev => prev.filter(q => q.id !== quoteId));
+        setQuotes(prev => prev.filter(q => q.id !== id));
+      } else {
+        setErrorMessage("حذف سخن با خطا مواجه شد.");
       }
     } catch (err) {
-      console.error(err);
+      console.error("Failed to delete quote:", err);
     }
   };
 
   return (
-    <>
-      <div className="min-h-screen bg-[#070609] text-[#f3f4f6] font-sans flex flex-col justify-between h-screen overflow-hidden pt-8">
+    <div className="min-h-screen lg:h-[calc(100vh-32px)] bg-black text-[#f3f4f6] font-sans relative lg:overflow-hidden flex flex-col selection:bg-purple-600/30 pt-8 pb-4">
       
-      {/* Header Bar */}
-      <div className="bg-zinc-950/90 backdrop-blur-md border-b border-zinc-900/80 px-4 py-3 md:px-8 flex items-center justify-between shadow-md shrink-0">
-        
-        {/* Left: Go Back & Quotes Mobile Toggle */}
-        <div className="flex items-center gap-2">
+      {/* Decorative Background Glows */}
+      <div className="absolute top-[-25%] right-[-15%] w-[60vw] h-[60vw] rounded-full bg-purple-950/10 blur-[130px] animate-pulse pointer-events-none"></div>
+      <div className="absolute bottom-[-25%] left-[-15%] w-[60vw] h-[60vw] rounded-full bg-zinc-900/10 blur-[130px] animate-pulse pointer-events-none"></div>
+
+      {/* Header */}
+      <header className="bg-zinc-950/85 backdrop-blur-xl border-b border-zinc-900/60 relative z-20 px-4 py-4 md:px-8 shadow-md" dir="rtl">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-zinc-900/60 border border-zinc-850 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-zinc-900/40 border border-zinc-850 px-3 py-1.5 rounded-xl transition-all cursor-pointer font-bold shadow-md"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>برگشت</span>
+            <span>بازگشت به هاب اصلی</span>
           </button>
 
-          {/* Quotes Toggle Button for smaller screens */}
-          <button
-            onClick={() => setShowQuotesMobile(true)}
-            className="lg:hidden flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-950/40 border border-indigo-900/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-            title="سخن بزرگان"
-          >
-            <QuoteIcon className="w-4 h-4 text-indigo-400" />
-            <span>سخن بزرگان</span>
-          </button>
-        </div>
-
-        {/* Center: Info */}
-        <div className="flex items-center gap-3 text-right">
-          <div className="hidden md:block">
-            <h2 className="text-sm font-black text-white flex items-center justify-end gap-1.5">
-              <span>گروه تالار بزرگـان</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-            </h2>
-            <p className="text-[10px] text-zinc-500 mt-0.5">{activeUsers.length} عضو فعال اخیر</p>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wide">بخش ویژه سخنان ماندگار و گفتگو</span>
+              <h1 className="text-lg font-black text-white flex items-center gap-2 justify-end">
+                <span>تالار بزرگان</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span>
+              </h1>
+            </div>
+            <div className="w-10 h-10 rounded-2xl bg-purple-950/50 border border-purple-800/40 flex items-center justify-center text-purple-400 shadow-inner">
+              <Quote className="w-5 h-5" />
+            </div>
           </div>
+
+        </div>
+      </header>
+
+      {/* Main Panel layout */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4 md:py-6 flex flex-col lg:flex-row gap-6 lg:overflow-hidden relative z-10" dir="rtl">
+        
+        {/* Right side: Quotes Registry */}
+        <div className="flex-1 lg:w-1/2 flex flex-col space-y-4 lg:overflow-hidden bg-zinc-950/40 border border-zinc-900 rounded-3xl p-4 md:p-6 shadow-2xl">
           
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-600/20 to-purple-600/20 border border-purple-900/40 flex items-center justify-center text-purple-400 shadow shadow-purple-950/40">
-            <Users className="w-5 h-5" />
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-black text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+              <span>ثبت سخنان ماندگار بزرگان</span>
+            </h2>
+            <span className="text-[10px] bg-purple-950 text-purple-300 border border-purple-900/40 px-2 py-1 rounded-lg font-mono">
+              {quotes.length} سخن ثبت شده
+            </span>
           </div>
-        </div>
 
-      </div>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            سخنان گرانبهای خود یا جملات قصار نویسندگان، شاعران و بزرگان را در این بخش ثبت کنید تا در نوار متحرک بالای تمام تالارهای سایت نمایش داده شود.
+          </p>
 
-      {/* Main Body Grid */}
-      <div className="flex-1 flex overflow-hidden relative">
-
-        {/* Left Sidebar: Sokhan Bozorgan (Desktop) */}
-        <div className="w-72 bg-zinc-950 border-r border-zinc-900 overflow-y-auto hidden lg:flex flex-col text-right p-4 space-y-4 shrink-0 justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs font-bold text-zinc-400 border-b border-zinc-900 pb-2 mb-2">
-              <button 
-                onClick={() => setShowAddQuote(true)}
-                className="text-[10px] bg-indigo-950 text-indigo-400 px-2 py-0.5 rounded-full hover:bg-indigo-900 transition-colors cursor-pointer flex items-center gap-1 font-bold"
-              >
-                <PlusCircle className="w-3 h-3" />
-                <span>افزودن</span>
-              </button>
-              <span className="flex items-center gap-1.5">
-                <span>سخن بزرگان</span>
-                <QuoteIcon className="w-3.5 h-3.5 text-indigo-400" />
-              </span>
-            </div>
-
-            {/* Quotes list */}
-            <div className="space-y-3 max-h-[calc(100vh-160px)] overflow-y-auto pr-1">
-              {quotesLoading ? (
-                <p className="text-[10px] text-zinc-500 text-center py-4">در حال بارگذاری سخنان...</p>
-              ) : quotes.length === 0 ? (
-                <p className="text-[10px] text-zinc-600 text-center py-4">هنوز هیچ سخنی ثبت نشده است.</p>
-              ) : (
-                quotes.map((q) => (
-                  <div key={q.id} className="bg-zinc-900/30 hover:bg-zinc-900/60 transition-all border border-zinc-900/50 p-3 rounded-xl space-y-2 group relative">
-                    <p className="text-xs text-zinc-300 leading-relaxed text-right font-serif italic">
-                      «{q.text}»
-                    </p>
-                    <div className="flex items-center justify-between text-[9px] text-zinc-500">
-                      {(q.submittedBy === currentUser.username || currentUser.role === "admin") ? (
-                        deletingQuoteId === q.id ? (
-                          <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-rose-950/40">
-                            <span className="text-[8px] text-rose-400">حذف؟</span>
-                            <button
-                              onClick={() => {
-                                handleDeleteQuote(q.id);
-                                setDeletingQuoteId(null);
-                              }}
-                              className="bg-rose-950 text-rose-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-rose-900 cursor-pointer"
-                            >
-                              بله
-                            </button>
-                            <button
-                              onClick={() => setDeletingQuoteId(null)}
-                              className="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-zinc-700 cursor-pointer"
-                            >
-                              خیر
-                            </button>
-                          </div>
-                        ) : (
-                          <button 
-                            onClick={() => setDeletingQuoteId(q.id)}
-                            className="text-zinc-500 hover:text-rose-450 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                            title="حذف سخن"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )
-                      ) : <span />}
-                      <span className="font-bold text-indigo-400">— {q.author}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Sidebar: Members list (Desktop or toggled) */}
-        <AnimatePresence>
-          {(showMembers || !showMembers) && (
-            <div className={`w-64 bg-zinc-950 border-l border-zinc-900 overflow-y-auto hidden md:block text-right p-4 space-y-4 shrink-0`}>
-              <div className="flex items-center justify-between text-xs font-bold text-zinc-400 border-b border-zinc-900 pb-2 mb-2">
-                <span className="text-[10px] bg-indigo-950 text-indigo-400 px-2 py-0.5 rounded-full">{activeUsers.length}</span>
-                <span>هم‌صحبت‌ها</span>
-              </div>
-              
-              <div className="space-y-2">
-                {activeUsers.map((user, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-zinc-900/40 border border-zinc-900/20">
-                    <span className="text-[9px] text-emerald-400 bg-emerald-950/30 px-1.5 py-0.5 rounded-full font-bold">آنلاین</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-zinc-300">{user}</span>
-                      <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-black text-white">
-                        {user.charAt(0).toUpperCase()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {errorMessage && (
+            <div className="bg-red-950/40 border border-red-900/50 text-red-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              <span>{errorMessage}</span>
             </div>
           )}
-        </AnimatePresence>
 
-        {/* Chat Stream Screen */}
-        <div className="flex-1 flex flex-col justify-between overflow-hidden relative">
-          
-          {/* Internal search filter bar */}
-          <div className="bg-zinc-950/40 border-b border-zinc-900/40 px-4 py-2 flex items-center justify-end shrink-0 gap-2">
-            <div className="relative w-48 md:w-64">
-              <input
-                type="text"
-                placeholder="جستجو در پیام‌ها..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-900/75 border border-zinc-850 rounded-lg py-1 px-8 text-white text-xs text-right focus:outline-none focus:border-indigo-600 transition-colors"
+          {/* Form to submit quote */}
+          <form onSubmit={handleAddQuote} className="bg-zinc-950/90 border border-purple-950/40 rounded-2xl p-4 space-y-3 shrink-0 shadow-lg">
+            <div>
+              <label className="block text-[10px] text-zinc-500 font-bold mb-1 mr-1">متن سخن</label>
+              <textarea
+                value={quoteText}
+                onChange={(e) => setQuoteText(e.target.value)}
+                placeholder="« سخن گرانبها را اینجا بنویسید... »"
+                rows={2}
+                className="w-full bg-zinc-900/80 border border-zinc-800 text-xs rounded-xl p-3 text-right text-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-all resize-none font-medium"
+                required
               />
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2" />
-            </div>
-          </div>
-
-          {/* Messages container scrollable */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-gradient-to-b from-[#08070b] to-[#040406]">
-            {loading ? (
-              <div className="text-center text-zinc-500 text-xs py-10">در حال بارگذاری پیام‌ها...</div>
-            ) : filteredMessages.length === 0 ? (
-              <div className="text-center py-16 text-zinc-600 text-xs">
-                {searchQuery ? "پیامی پیدا نشد." : "هیچ پیامی هنوز ارسال نشده است. اولین پیام را ارسال کنید!"}
-              </div>
-            ) : (
-              <AnimatePresence initial={false}>
-                {filteredMessages.map((msg) => {
-                  const isMe = msg.username === currentUser.username;
-                  const isGif = isGifUrl(msg.text);
-
-                  return (
-                    <motion.div
-                      key={msg.id}
-                      initial={{ opacity: 0, y: 15, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.25, ease: "easeOut" }}
-                      layout
-                      className={`flex items-center gap-2 group/msg w-full ${isMe ? "justify-end" : "justify-start"}`}
-                    >
-                      {/* Reply button on the left of my message */}
-                      {isMe && (
-                        <button
-                          onClick={() => setReplyMessage(msg)}
-                          className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1.5 hover:bg-zinc-900/80 rounded-lg text-zinc-500 hover:text-indigo-400 cursor-pointer text-[10px] flex items-center gap-1 shrink-0"
-                          title="پاسخ به این پیام"
-                        >
-                          <Reply className="w-3.5 h-3.5" />
-                          <span className="hidden md:inline font-bold">پاسخ</span>
-                        </button>
-                      )}
-
-                      <div className={`flex items-start gap-3 max-w-[80%] md:max-w-[65%] ${isMe ? "flex-row" : "flex-row"}`}>
-                        
-                        {/* Avatar for others */}
-                        {!isMe && (
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 border border-indigo-500/30 flex items-center justify-center text-xs text-white font-extrabold shrink-0 shadow-lg">
-                            {getInitials(msg.username)}
-                          </div>
-                        )}
-
-                        {/* Bubble Content */}
-                        <div className="space-y-1 text-right">
-                          
-                          {/* Name of sender */}
-                          {!isMe && (
-                            <span className="block text-[11px] font-extrabold text-indigo-400 text-right pr-1">
-                              {msg.username}
-                            </span>
-                          )}
-
-                          {/* Chat box / GIF display */}
-                          {isGif ? (
-                            <div className="relative rounded-2xl overflow-hidden border border-zinc-800/80 bg-zinc-950 p-1.5 shadow-xl group">
-                              {/* Reply Preview inside GIF */}
-                              {msg.replyToUser && (
-                                <div className="mb-1.5 text-right border-r-2 border-indigo-500 bg-zinc-900/85 px-2.5 py-1 rounded-lg text-[9px] text-zinc-300 max-w-xs truncate">
-                                  <span className="font-extrabold text-indigo-400 block text-[8px]">در پاسخ به {msg.replyToUser}</span>
-                                  <span>{msg.replyToText}</span>
-                                </div>
-                              )}
-
-                              <img
-                                src={msg.text.trim()}
-                                alt="GIF"
-                                className="max-h-52 md:max-h-64 object-contain rounded-xl max-w-full"
-                                referrerPolicy="no-referrer"
-                              />
-                              <div className="absolute bottom-2 right-2.5 bg-black/75 backdrop-blur-md text-[8px] px-2 py-0.5 rounded-full font-bold text-zinc-400">
-                                GIF
-                              </div>
-                              <span className="absolute bottom-2 left-2.5 bg-black/75 backdrop-blur-md text-[8px] px-2 py-0.5 rounded-full font-mono text-zinc-400">
-                                {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          ) : (
-                            /* Chat text box */
-                            <div
-                              className={`p-3.5 rounded-2xl shadow-xl relative leading-relaxed text-xs text-right break-words border transition-colors ${
-                                isMe
-                                  ? "bg-gradient-to-br from-indigo-600 to-purple-600 text-white border-indigo-500/20 rounded-tr-none"
-                                  : "bg-zinc-900 text-zinc-100 border-zinc-800/80 rounded-tl-none"
-                              }`}
-                            >
-                              {/* Reply Preview inside Text Bubble */}
-                              {msg.replyToUser && (
-                                <div className={`mb-2 text-right border-r-2 px-2.5 py-1 rounded-lg text-[10px] max-w-md truncate ${
-                                  isMe 
-                                    ? "border-indigo-300 bg-black/30 text-zinc-200" 
-                                    : "border-indigo-500 bg-zinc-950/50 text-zinc-400"
-                                }`}>
-                                  <span className="font-extrabold block text-[9px] text-indigo-300">در پاسخ به {msg.replyToUser}</span>
-                                  <span>{msg.replyToText}</span>
-                                </div>
-                              )}
-
-                              <p className="whitespace-pre-wrap">{msg.text}</p>
-                              
-                              {/* Timestamp */}
-                              <span className={`block text-[8px] mt-2 font-mono text-left ${isMe ? "text-indigo-200" : "text-zinc-500"}`}>
-                                {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          )}
-
-                        </div>
-
-                        {/* Avatar for me */}
-                        {isMe && (
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 border border-indigo-500/30 flex items-center justify-center text-xs text-white font-extrabold shrink-0 shadow-lg">
-                            {getInitials(msg.username)}
-                          </div>
-                        )}
-
-                      </div>
-
-                      {/* Reply button on the right of other's message */}
-                      {!isMe && (
-                        <button
-                          onClick={() => setReplyMessage(msg)}
-                          className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1.5 hover:bg-zinc-900/80 rounded-lg text-zinc-500 hover:text-indigo-400 cursor-pointer text-[10px] flex items-center gap-1 shrink-0"
-                          title="پاسخ به این پیام"
-                        >
-                          <span className="hidden md:inline font-bold">پاسخ</span>
-                          <Reply className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Shared GIF Selection Panel Drawer */}
-          <AnimatePresence>
-            {showGifPanel && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="bg-zinc-950 border-t border-zinc-900/80 overflow-hidden shrink-0"
-              >
-                <div className="p-4 max-w-4xl mx-auto space-y-3 text-right">
-                  {/* Panel Header */}
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddGifForm(!showAddGifForm)}
-                      className="text-[10px] bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 px-3 py-1.5 rounded-xl border border-amber-500/20 transition-all font-bold cursor-pointer flex items-center gap-1"
-                    >
-                      <PlusCircle className="w-3.5 h-3.5" />
-                      <span>{showAddGifForm ? "بازگشت به لیست" : "افزودن گیف جدید"}</span>
-                    </button>
-                    <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                      <span>کتابخانه گیف‌های تالار</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                    </span>
-                  </div>
-
-                  {/* Add New GIF Form */}
-                  {showAddGifForm ? (
-                    <form onSubmit={handleAddGifSubmit} className="bg-zinc-900/40 p-3.5 rounded-2xl border border-zinc-900 space-y-3">
-                      <div className="flex justify-between items-center border-b border-zinc-900 pb-2 mb-2">
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setGifSourceType("file")}
-                            className={`text-[10px] px-3 py-1 rounded-lg transition-all font-bold cursor-pointer ${
-                              gifSourceType === "file"
-                                ? "bg-amber-600/30 border border-amber-600/40 text-amber-300 font-extrabold"
-                                : "bg-zinc-950 border border-zinc-900 text-zinc-500 hover:text-zinc-300"
-                            }`}
-                          >
-                            آپلود فایل گیف
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setGifSourceType("url")}
-                            className={`text-[10px] px-3 py-1 rounded-lg transition-all font-bold cursor-pointer ${
-                              gifSourceType === "url"
-                                ? "bg-amber-600/30 border border-amber-600/40 text-amber-300 font-extrabold"
-                                : "bg-zinc-950 border border-zinc-900 text-zinc-500 hover:text-zinc-300"
-                            }`}
-                          >
-                            لینک اینترنتی گیف
-                          </button>
-                        </div>
-                        <h4 className="text-[11px] font-bold text-zinc-300">افزودن گیف سفارشی برای استفاده همگان</h4>
-                      </div>
-                      
-                      {gifSubmitError && (
-                        <div className="bg-rose-950/30 border border-rose-900/40 text-rose-300 text-[10px] py-2 px-3 rounded-xl">
-                          {gifSubmitError}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {gifSourceType === "file" ? (
-                          <div className="space-y-1">
-                            <label className="block text-[10px] text-zinc-500 text-right">آپلود فایل گیف از دستگاه (حداکثر ۱۰ مگابایت)</label>
-                            <input
-                              type="file"
-                              accept="image/gif"
-                              required={!localGifBase64}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  if (file.size > 10 * 1024 * 1024) {
-                                    setGifSubmitError("حجم فایل گیف نباید بیشتر از ۱۰ مگابایت باشد.");
-                                    return;
-                                  }
-                                  setGifSubmitError("");
-                                  setLocalGifFile(file);
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => {
-                                    setLocalGifBase64(reader.result as string);
-                                    if (!newGifName) {
-                                      setNewGifName(file.name.replace(/\.[^/.]+$/, ""));
-                                    }
-                                  };
-                                  reader.readAsDataURL(file);
-                                }
-                              }}
-                              className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-1.5 px-3 text-xs text-white text-right focus:outline-none focus:border-amber-600 file:bg-zinc-800 file:text-zinc-300 file:border-0 file:rounded-lg file:px-2.5 file:py-1 file:ml-2 file:cursor-pointer"
-                            />
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <label className="block text-[10px] text-zinc-500 text-right">آدرس اینترنتی گیف (GIF URL)</label>
-                            <input
-                              type="url"
-                              required
-                              placeholder="https://example.com/anime.gif"
-                              value={newGifUrl}
-                              onChange={(e) => setNewGifUrl(e.target.value)}
-                              className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-2 px-3 text-xs text-white text-left focus:outline-none focus:border-amber-600 font-mono"
-                              dir="ltr"
-                            />
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          <label className="block text-[10px] text-zinc-500 text-right">نام یا هشتگ گیف</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="مثال: لوفی خوشحال"
-                            value={newGifName}
-                            onChange={(e) => setNewGifName(e.target.value)}
-                            className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-2 px-3 text-xs text-white text-right focus:outline-none focus:border-amber-600"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end pt-1">
-                        <button
-                          type="submit"
-                          disabled={isSubmittingGif}
-                          className="bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-800 text-xs font-bold text-white py-2 px-6 rounded-xl cursor-pointer"
-                        >
-                          {isSubmittingGif ? "در حال ثبت و آپلود..." : "افزودن به لیست عمومی"}
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    /* GIFs Grid */
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-40 overflow-y-auto pr-1">
-                      {gifsLoading ? (
-                        <div className="col-span-full text-center text-zinc-600 text-[10px] py-6">در حال بارگذاری گیف‌ها...</div>
-                      ) : sharedGifs.length === 0 ? (
-                        <div className="col-span-full text-center text-zinc-600 text-[10px] py-6">هنوز هیچ گیفی اضافه نشده است.</div>
-                      ) : (
-                        sharedGifs.map((gif) => (
-                          <div
-                            key={gif.id}
-                            onClick={() => handleSelectGif(gif.url)}
-                            className="relative group aspect-video rounded-xl overflow-hidden border border-zinc-900 bg-zinc-900/60 hover:border-amber-500/60 cursor-pointer shadow hover:shadow-amber-950/20 transition-all flex flex-col justify-end"
-                          >
-                            <img
-                              src={gif.url}
-                              alt={gif.name}
-                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              referrerPolicy="no-referrer"
-                            />
-                            {/* Hover info overlay */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-100 flex flex-col justify-end p-1">
-                              <span className="text-[9px] font-bold text-zinc-300 truncate">{gif.name}</span>
-                            </div>
-
-                            {/* Delete button (owner or admin) */}
-                            {(gif.addedBy === currentUser.username || currentUser.role === "admin") && (
-                              deletingGifId === gif.id ? (
-                                <div 
-                                  onClick={(e) => e.stopPropagation()} 
-                                  className="absolute top-1 left-1 flex items-center gap-1 bg-black/95 px-1 py-0.5 rounded-md border border-rose-900/50 z-20"
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      handleDeleteGif(e, gif.id);
-                                      setDeletingGifId(null);
-                                    }}
-                                    className="bg-rose-950 text-rose-400 px-1 py-0.5 rounded text-[8px] hover:bg-rose-900 cursor-pointer"
-                                  >
-                                    آره
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeletingGifId(null);
-                                    }}
-                                    className="bg-zinc-800 text-zinc-400 px-1 py-0.5 rounded text-[8px] hover:bg-zinc-700 cursor-pointer"
-                                  >
-                                    نه
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeletingGifId(gif.id);
-                                  }}
-                                  className="absolute top-1 left-1 p-1 rounded-md bg-black/70 hover:bg-rose-900 text-zinc-400 hover:text-white transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
-                                  title="حذف گیف"
-                                >
-                                  <Trash2 className="w-2.5 h-2.5" />
-                                </button>
-                              )
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Bottom input area */}
-          <div className="bg-zinc-950 border-t border-zinc-900/80 p-3 md:p-4 shrink-0">
-            {replyMessage && (
-              <div className="max-w-4xl mx-auto mb-2 bg-indigo-950/40 border border-indigo-900/50 rounded-xl px-3 py-2 flex items-center justify-between text-right" dir="rtl">
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <Reply className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <div className="text-right overflow-hidden">
-                    <span className="block text-[10px] font-extrabold text-indigo-300">در حال پاسخ به {replyMessage.username}</span>
-                    <span className="block text-[10px] text-zinc-400 truncate max-w-lg">
-                      {isGifUrl(replyMessage.text) ? "تصویر متحرک (GIF)" : replyMessage.text}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setReplyMessage(null)}
-                  className="text-zinc-500 hover:text-white transition-colors text-xs font-bold p-1 cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            <form onSubmit={handleSendMessage} className="flex gap-2 max-w-4xl mx-auto">
-              
-              {/* Send trigger */}
-              <button
-                type="submit"
-                disabled={!inputText.trim() || isSending}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-900 disabled:text-zinc-600 text-white p-2.5 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow active:scale-95 shrink-0"
-              >
-                <Send className="w-4 h-4 scale-x-[-1]" />
-              </button>
-
-              {/* Message field */}
-              <input
-                type="text"
-                placeholder="پیامی بنویسید..."
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl py-2.5 px-4 text-xs text-white text-right focus:outline-none focus:border-indigo-600"
-              />
-
-              {/* GIF Picker Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setShowGifPanel(!showGifPanel)}
-                className={`px-3 py-2.5 rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow active:scale-95 shrink-0 font-bold ${
-                  showGifPanel 
-                    ? "bg-amber-600 border-amber-500 text-white" 
-                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-                title="گیف‌ها"
-              >
-                <span className="text-[10px] tracking-wide font-black">GIF</span>
-              </button>
-
-            </form>
-          </div>
-
-        </div>
-
-      </div>
-
-    </div>
-
-    {/* Mobile Overlay Modal for Sokhan Bozorgan */}
-    <AnimatePresence>
-      {showQuotesMobile && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
-            transition={{ type: "spring", damping: 25, stiffness: 350 }}
-            className="bg-zinc-950 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl border-t sm:border border-zinc-900/80 p-6 flex flex-col max-h-[85vh] sm:max-h-[80vh] overflow-hidden text-right"
-          >
-            <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-4">
-              <button
-                onClick={() => setShowAddQuote(true)}
-                className="text-[11px] bg-indigo-600 text-white px-3 py-1.5 rounded-xl hover:bg-indigo-500 transition-colors flex items-center gap-1 font-bold"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>افزودن سخن جدید</span>
-              </button>
-              <h3 className="text-sm font-black text-white flex items-center gap-2">
-                <span>سخن بزرگان</span>
-                <QuoteIcon className="w-4 h-4 text-indigo-400" />
-              </h3>
             </div>
 
-            {/* Quote items in mobile overlay */}
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-              {quotesLoading ? (
-                <p className="text-xs text-zinc-500 text-center py-8">در حال بارگذاری سخنان...</p>
-              ) : quotes.length === 0 ? (
-                <p className="text-xs text-zinc-600 text-center py-8">هیچ سخنی تا کنون ثبت نشده است.</p>
-              ) : (
-                quotes.map((q) => (
-                  <div key={q.id} className="bg-zinc-900/40 border border-zinc-900/60 p-4 rounded-2xl space-y-2 relative group">
-                    <p className="text-xs text-zinc-300 leading-relaxed font-serif italic text-right">
-                      «{q.text}»
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                      {(q.submittedBy === currentUser.username || currentUser.role === "admin") ? (
-                        deletingQuoteId === q.id ? (
-                          <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-rose-950/40">
-                            <span className="text-[8px] text-rose-400">حذف؟</span>
-                            <button
-                              onClick={() => {
-                                handleDeleteQuote(q.id);
-                                setDeletingQuoteId(null);
-                              }}
-                              className="bg-rose-950 text-rose-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-rose-900 cursor-pointer"
-                            >
-                              بله
-                            </button>
-                            <button
-                              onClick={() => setDeletingQuoteId(null)}
-                              className="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-zinc-700 cursor-pointer"
-                            >
-                              خیر
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeletingQuoteId(q.id)}
-                            className="text-rose-400 hover:text-rose-350 cursor-pointer p-1"
-                            title="حذف سخن"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )
-                      ) : <span />}
-                      <span className="font-bold text-indigo-400">— {q.author}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <button
-              onClick={() => setShowQuotesMobile(false)}
-              className="mt-4 w-full bg-zinc-900 hover:bg-zinc-850 text-xs font-bold text-zinc-300 py-3 rounded-xl border border-zinc-800 cursor-pointer"
-            >
-              بستن صفحه
-            </button>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-
-    {/* Form Modal to Add New Quote */}
-    <AnimatePresence>
-      {showAddQuote && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-zinc-950 border border-zinc-900 w-full max-w-sm rounded-3xl p-6 text-right"
-          >
-            <h3 className="text-sm font-black text-white mb-4 flex items-center justify-end gap-2">
-              <span>افزودن سخن گرانبها</span>
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-            </h3>
-
-            {quoteError && (
-              <div className="bg-rose-950/40 border border-rose-900 text-rose-300 text-xs p-3 rounded-xl mb-4 text-center">
-                {quoteError}
-              </div>
-            )}
-
-            <form onSubmit={handleAddQuote} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-zinc-400">متن سخن یا نقل‌قول</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={newQuoteText}
-                  onChange={(e) => setNewQuoteText(e.target.value)}
-                  placeholder="مثال: کار بزرگ را کسی انجام می‌دهد که از شکست ترسی ندارد..."
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-white text-right focus:outline-none focus:border-indigo-600 leading-relaxed"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-zinc-400">نام گوینده یا نویسنده</label>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="block text-[10px] text-zinc-500 font-bold mb-1 mr-1">نام گوینده / نویسنده</label>
                 <input
                   type="text"
+                  value={quoteAuthor}
+                  onChange={(e) => setQuoteAuthor(e.target.value)}
+                  placeholder="مثلا: فردوسی"
+                  className="w-full bg-zinc-900/80 border border-zinc-800 text-xs rounded-xl p-3 text-right text-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-all font-bold"
                   required
-                  value={newQuoteAuthor}
-                  onChange={(e) => setNewQuoteAuthor(e.target.value)}
-                  placeholder="مثال: کوروش بزرگ، ارد بزرگ، شکسپیر"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-white text-right focus:outline-none focus:border-indigo-600"
                 />
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddQuote(false);
-                    setQuoteError("");
-                  }}
-                  className="flex-1 bg-zinc-900 hover:bg-zinc-850 text-xs font-bold text-zinc-400 py-2.5 rounded-xl border border-zinc-850 cursor-pointer"
-                >
-                  انصراف
-                </button>
+              <div className="flex items-end">
                 <button
                   type="submit"
-                  disabled={isSubmittingQuote}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-900 text-xs font-bold text-white py-2.5 rounded-xl cursor-pointer"
+                  className="bg-purple-600 hover:bg-purple-500 text-white font-black text-xs px-6 py-3.5 rounded-xl transition-all active:scale-[0.98] cursor-pointer shadow-lg shadow-purple-950/30 flex items-center gap-1.5 h-[46px]"
                 >
-                  {isSubmittingQuote ? "در حال ثبت..." : "ثبت سخن"}
+                  <Sparkles className="w-4 h-4" />
+                  <span>ثبت سخن</span>
                 </button>
               </div>
-            </form>
-          </motion.div>
+            </div>
+          </form>
+
+          {/* List of Quotes */}
+          <div className="flex-1 overflow-y-auto max-h-[380px] lg:max-h-[580px] space-y-3.5 pr-1 min-h-[250px]">
+            {loading ? (
+              <div className="text-center py-12 text-xs text-zinc-500">در حال بارگذاری سخنان...</div>
+            ) : quotes.length === 0 ? (
+              <div className="text-center py-16 text-xs text-zinc-500 bg-zinc-950/20 border border-zinc-900/40 border-dashed rounded-2xl">
+                هنوز هیچ سخنی در این بخش ثبت نشده است. اولین سخن را شما بنویسید!
+              </div>
+            ) : (
+              quotes.map((q) => {
+                const isOwner = q.submittedBy === currentUser.username || q.submittedBy === currentUser.nickname || currentUser.role === "admin";
+                return (
+                  <div
+                    key={q.id}
+                    className="bg-zinc-950 border border-zinc-900/80 hover:border-purple-900/30 rounded-2xl p-4 space-y-3 relative group transition-all duration-300"
+                  >
+                    <p className="text-xs text-zinc-100 leading-relaxed font-semibold">« {q.text} »</p>
+                    <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-zinc-900/60">
+                      <span>نویسنده: <strong className="text-purple-400 font-bold">{q.author}</strong></span>
+                      <span className="text-[9px]">فرستنده: {q.submittedBy}</span>
+                    </div>
+
+                    {isOwner && (
+                      <button
+                        onClick={() => handleDeleteQuote(q.id)}
+                        className="absolute top-3 left-3 p-1.5 bg-zinc-900 hover:bg-red-950/40 text-zinc-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                        title="حذف سخن"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
         </div>
-      )}
-    </AnimatePresence>
-    </>
+
+        {/* Left side: Chat Room */}
+        <div className="flex-1 lg:w-1/2 flex flex-col space-y-4 lg:overflow-hidden bg-zinc-950/40 border border-zinc-900 rounded-3xl p-4 md:p-6 shadow-2xl">
+          
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-black text-white flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-purple-400" />
+              <span>اتاق گفتگوی بزرگان</span>
+            </h2>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              <span className="text-[10px] text-zinc-500">زنده</span>
+            </div>
+          </div>
+
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            در این تالار به بحث، تبادل نظر و گفتگو با سایر بزرگان گروه بپردازید. تمام پیام‌ها به صورت آنلاین و هماهنگ بروزرسانی می‌شوند.
+          </p>
+
+          {/* Chat box */}
+          <div className="flex-1 bg-black/40 border border-zinc-900/80 rounded-2xl flex flex-col overflow-hidden min-h-[300px]">
+            
+            {/* Messages container */}
+            <div className="flex-1 overflow-y-auto max-h-[380px] lg:max-h-[500px] p-4 space-y-4 relative">
+              {loading ? (
+                <div className="text-center py-12 text-xs text-zinc-500">در حال دریافت پیام‌ها...</div>
+              ) : chat.length === 0 ? (
+                <div className="text-center py-16 text-xs text-zinc-500">هیچ پیامی در این تالار ارسال نشده است. اولین پیام را ارسال کنید!</div>
+              ) : (
+                chat.map((msg) => {
+                  const isCurrentUser = msg.username === currentUser.username;
+                  const isGif = msg.text.startsWith("http") || msg.text.startsWith("/uploads") || msg.text.includes(".gif");
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col group/msg ${isCurrentUser ? "items-start" : "items-end"}`}
+                    >
+                      {/* Message header */}
+                      <div className="flex items-center gap-1.5 mb-1 px-1">
+                        {!isCurrentUser && (
+                          <button
+                            onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
+                            className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 bg-zinc-900 hover:bg-zinc-800 text-purple-400 hover:text-purple-300 rounded-lg text-[9px] flex items-center gap-0.5 cursor-pointer"
+                            title="پاسخ"
+                          >
+                            <CornerUpLeft className="w-3 h-3" />
+                            <span>پاسخ</span>
+                          </button>
+                        )}
+                        <span className="text-[10px] font-black text-zinc-400">{msg.username}</span>
+                        <span className="text-[8px] text-zinc-600">
+                          {new Date(msg.createdAt).toLocaleTimeString("fa-IR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        {isCurrentUser && (
+                          <button
+                            onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
+                            className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 bg-zinc-900 hover:bg-zinc-800 text-purple-400 hover:text-purple-300 rounded-lg text-[9px] flex items-center gap-0.5 cursor-pointer"
+                            title="پاسخ"
+                          >
+                            <span>پاسخ</span>
+                            <CornerUpLeft className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Reply Reference Panel */}
+                      {msg.replyToText && (
+                        <div className="bg-zinc-950/60 border-r-2 border-purple-500 pr-2 pl-1 py-1 rounded-md text-[9px] text-zinc-400 mb-1 leading-normal max-w-[80%] truncate">
+                          پاسخ به <strong className="text-purple-400">{msg.replyToUser}</strong>: {msg.replyToText}
+                        </div>
+                      )}
+
+                      {/* Message body (Image/GIF or Text) */}
+                      {isGif ? (
+                        <div className="p-1 rounded-2xl bg-zinc-900 border border-zinc-850 overflow-hidden shadow-lg hover:scale-[1.02] transition-transform duration-300">
+                          <img
+                            src={msg.text}
+                            alt="uploaded gif"
+                            referrerPolicy="no-referrer"
+                            className="rounded-xl max-w-[200px] max-h-[160px] object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed max-w-[85%] break-words ${
+                          isCurrentUser
+                            ? "bg-purple-600 text-white rounded-tl-none font-semibold shadow-lg shadow-purple-950/10"
+                            : "bg-zinc-900 text-zinc-100 rounded-tr-none border border-zinc-850"
+                        }`}>
+                          {msg.text}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Uploading GIF status */}
+            {uploadingGif && (
+              <div className="bg-purple-950/30 border-t border-purple-900/30 text-purple-300 text-[10px] px-4 py-2 flex items-center gap-2 animate-pulse justify-center">
+                <Smile className="w-4 h-4 animate-spin" />
+                <span>در حال بارگذاری فایل گیف و ارسال...</span>
+              </div>
+            )}
+
+            {/* Replying To Ribbon Bar */}
+            {replyTo && (
+              <div className="bg-purple-950/50 border-t border-purple-900/40 px-4 py-2 flex items-center justify-between text-xs text-purple-300 relative z-10">
+                <div className="flex items-center gap-1.5 truncate">
+                  <CornerUpLeft className="w-3.5 h-3.5 shrink-0" />
+                  <span>پاسخ به <strong className="font-extrabold text-white">{replyTo.username}</strong>:</span>
+                  <span className="truncate max-w-[200px] text-[10px] text-zinc-400">"{replyTo.text}"</span>
+                </div>
+                <button
+                  onClick={() => setReplyTo(null)}
+                  className="p-1 hover:bg-purple-900/30 rounded-lg text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Chat Input & Accessories form */}
+            <div className="p-3 bg-zinc-950 border-t border-zinc-900 relative">
+              
+              {/* GIF Selector Box Overlay */}
+              {gifSelectorOpen && (
+                <div className="absolute bottom-[100%] right-3 left-3 bg-zinc-950 border border-zinc-900 rounded-2xl p-3 shadow-2xl space-y-3 z-30 mb-2">
+                  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                    <span className="text-[10px] font-black text-purple-400">انتخاب یا بارگذاری گیف</span>
+                    <button
+                      onClick={() => setGifSelectorOpen(false)}
+                      className="text-zinc-500 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Preset GIFs grid */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {PRESET_GIFS.map((g) => (
+                      <button
+                        key={g.name}
+                        onClick={() => {
+                          handleSendChat(undefined, g.url);
+                          setGifSelectorOpen(false);
+                        }}
+                        className="bg-zinc-900 hover:bg-purple-950/20 border border-zinc-800 hover:border-purple-900/30 rounded-xl p-1 text-center transition-all cursor-pointer relative group overflow-hidden"
+                      >
+                        <img
+                          src={g.url}
+                          alt={g.name}
+                          className="w-full h-10 object-cover rounded-lg mb-1"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span className="text-[8px] text-zinc-400 font-bold group-hover:text-purple-300">{g.name}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* File upload trigger */}
+                  <div className="border-t border-zinc-900 pt-2.5">
+                    <label className="flex items-center justify-center gap-2 bg-purple-950/50 hover:bg-purple-900/40 border border-purple-900/30 rounded-xl px-3 py-2 cursor-pointer text-[10px] font-bold text-purple-300 hover:text-white transition-all text-center">
+                      <Image className="w-4 h-4" />
+                      <span>بارگذاری فایل GIF سفارشی</span>
+                      <input
+                        type="file"
+                        accept="image/gif"
+                        onChange={handleGifUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Input Bar */}
+              <form onSubmit={(e) => handleSendChat(e)} className="flex gap-2">
+                
+                {/* GIF Button */}
+                <button
+                  type="button"
+                  onClick={() => setGifSelectorOpen(!gifSelectorOpen)}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                    gifSelectorOpen 
+                      ? "bg-purple-900/30 border-purple-700 text-purple-400" 
+                      : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-850"
+                  }`}
+                  title="ارسال GIF"
+                >
+                  <Smile className="w-4 h-4" />
+                </button>
+
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="پیامی بنویسید..."
+                  className="flex-1 bg-zinc-900 border border-zinc-800 text-xs rounded-xl px-4 py-3 text-right text-white focus:outline-none focus:border-purple-600 transition-all font-medium"
+                />
+
+                <button
+                  type="submit"
+                  className="p-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center shadow-lg shadow-purple-950/20 shrink-0"
+                >
+                  <Send className="w-4 h-4 rotate-180" />
+                </button>
+              </form>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </main>
+
+    </div>
   );
 }

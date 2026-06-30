@@ -192,7 +192,7 @@ export default function TalarFile({ currentUser, onBack }: TalarFileProps) {
     <div className="min-h-screen bg-black text-[#f3f4f6] font-sans pb-16 pt-8">
       
       {/* Top Header */}
-      <div className="bg-zinc-950/85 backdrop-blur-xl border-b border-zinc-900/60 sticky top-8 z-40 px-4 py-4 md:px-8 shadow-md">
+      <div className="bg-zinc-950/85 backdrop-blur-xl border-b border-zinc-900/60 relative z-20 px-4 py-4 md:px-8 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={onBack}

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { User, ChatMessage, LiveStreamStatus, TalarBozorgParticipant } from "../types";
 import { 
   ArrowLeft, Monitor, Play, Square, Tv, Users, Send, MessageCircle, 
-  Settings, Volume2, VolumeX, Eye, Radio, Sparkles, RefreshCw, AlertCircle, Maximize2,
-  Mic, MicOff, Video, VideoOff, PhoneOff, ScreenShare, PlusCircle, UserCheck, ShieldAlert, Copy, Check
+  Settings, Volume2, VolumeX, Eye, Radio, Sparkles, RefreshCw, AlertCircle, Maximize2, Minimize2,
+  Mic, MicOff, Video, VideoOff, PhoneOff, ScreenShare, PlusCircle, UserCheck, ShieldAlert, Copy, Check,
+  Trash2, CornerUpLeft, Image as ImageIcon, X, Smile
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Room, RoomEvent, VideoPresets, Track } from "livekit-client";
@@ -29,24 +30,49 @@ function LiveKitTrackRenderer({ track }: { track: any }) {
   return <div ref={containerRef} className="w-full h-full relative flex items-center justify-center bg-zinc-950 rounded-xl" />;
 }
 
+const PRESET_GIFS = [
+  { name: "خنده", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3Bkbndub2l6czlyM2UwbHdrdjV4cWJ5MDlzZDJwNjJ6OXFwZnFmOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ohhwfWemR7g3AL77G/giphy.gif" },
+  { name: "کف زدن", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbDVtcHBlZmp0bDVudndnaDlhZmd2MHllZnMwdWZ5ZHcycnMyeG9ldCZlcD12MV_internal_gif_by_id&ct=g/3o7qDQ4kcSD1PLM3BK/giphy.gif" },
+  { name: "شگفت‌زده", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHp1MGdzN2g2dDdsajZldmNmeTB6cjBwbmFsdXN4NG1vZWZ4NHZneCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/26ufdipOdXMTeQQ4o/giphy.gif" },
+  { name: "گریه", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbzdzbzBmdnAwZW92dzZkaW1uMHBnZnRxMDhxbnl3dmdtdXUwbms2MyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/KDRV3Qgh3p0hkAOg6z/giphy.gif" },
+  { name: "عالی", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExZW1sYzR5dnQ1eThmaTRnbHF3MTQzZmptd21mcnp2bnM5eXg1dnVmbSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/t3s3X2bVB8XNm/giphy.gif" },
+  { name: "موافقت", url: "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExeGJmMDhsMXYxOXphY2Y5YmpjdWF5aWJod2ZqMWk5ZmgzdThxbXFwbSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/g9582DNuQppazNM459/giphy.gif" }
+];
+
 interface MangaStreamProps {
   currentUser: User;
   onBack: () => void;
 }
 
 export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
-  // Hall selection state: 'none', 'bozorg' (Discord voice), 'koochak'/'koochak2' (YouTube-like stream)
-  const [selectedHall, setSelectedHall] = useState<'none' | 'bozorg' | 'koochak' | 'koochak2'>('none');
+  // Hall selection state: 'none', 'koochak'/'koochak2' (YouTube-like stream), 'bozorg' (Discord Stage & Quotes)
+  const [selectedHall, setSelectedHall] = useState<'none' | 'koochak' | 'koochak2' | 'bozorg'>('none');
+
+  // --- TALAR BOZORG (DISCORD STAGE & QUOTES CHAT) STATE ---
+  const [bozorgParticipants, setBozorgParticipants] = useState<TalarBozorgParticipant[]>([]);
+  const [bozorgChat, setBozorgChat] = useState<ChatMessage[]>([]);
+  const [bozorgChatInput, setBozorgChatInput] = useState<string>("");
+  const [bozorgQuotes, setBozorgQuotes] = useState<any[]>([]);
+  const [newQuoteText, setNewQuoteText] = useState<string>("");
+  const [newQuoteAuthor, setNewQuoteAuthor] = useState<string>("");
+  const [isBozorgJoined, setIsBozorgJoined] = useState<boolean>(false);
+  const [bozorgMicActive, setBozorgMicActive] = useState<boolean>(false);
+  const [bozorgWebcamActive, setBozorgWebcamActive] = useState<boolean>(false);
+  const [bozorgScreenActive, setBozorgScreenActive] = useState<boolean>(false);
+  const [bozorgLoading, setBozorgLoading] = useState<boolean>(true);
+  const [bozorgError, setBozorgError] = useState<string>("");
+  const [bozorgActiveTab, setBozorgActiveTab] = useState<'chat' | 'quotes'>('quotes');
+
+  const bozorgWebcamStreamRef = useRef<MediaStream | null>(null);
+  const bozorgWebcamIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const bozorgScreenStreamRef = useRef<MediaStream | null>(null);
+  const bozorgScreenIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const bozorgChatEndRef = useRef<HTMLDivElement>(null);
 
   // --- LIVEKIT (SFU) STREAMING STATE ---
   const [livekitConfig, setLivekitConfig] = useState<{ isConfigured: boolean; url: string } | null>(null);
   const [livekitVideoTrack, setLivekitVideoTrack] = useState<any | null>(null);
-  const [bozorgTracks, setBozorgTracks] = useState<Record<string, { camera?: any; screen?: any; audio?: any }>>({});
   const livekitRoomRef = useRef<Room | null>(null);
-
-  const koochakMediaRecorderRef = useRef<any>(null);
-  const playedKoochakAudioChunksRef = useRef<Set<string>>(new Set());
-  const joinedKoochakTimeRef = useRef<number>(0);
 
   // --- TALAR KOOCHAK (YOUTUBE) STATE ---
   const [streamStatus, setStreamStatus] = useState<LiveStreamStatus & { quality?: string }>({
@@ -58,6 +84,46 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   const [koochakChat, setKoochakChat] = useState<ChatMessage[]>([]);
   const [koochakInput, setKoochakInput] = useState<string>("");
   const [koochakLoading, setKoochakLoading] = useState<boolean>(true);
+
+  // Koochak Reply & GIF states
+  const [koochakReplyTo, setKoochakReplyTo] = useState<{ id: string; username: string; text: string } | null>(null);
+  const [koochakGifSelectorOpen, setKoochakGifSelectorOpen] = useState<boolean>(false);
+  const [koochakUploadingGif, setKoochakUploadingGif] = useState<boolean>(false);
+  const [isStreamZoomed, setIsStreamZoomed] = useState<boolean>(false);
+  const [isStreamFullscreen, setIsStreamFullscreen] = useState<boolean>(false);
+  const livePlayerContainerRef = useRef<HTMLDivElement>(null);
+  const lastKoochakMsgIdRef = useRef<string | null>(null);
+
+  const toggleFullscreen = () => {
+    if (!livePlayerContainerRef.current) return;
+    const nextFullscreen = !isStreamFullscreen;
+    setIsStreamFullscreen(nextFullscreen);
+
+    if (nextFullscreen) {
+      if (livePlayerContainerRef.current.requestFullscreen) {
+        livePlayerContainerRef.current.requestFullscreen().catch((err) => {
+          console.log("Browser fullscreen blocked/not supported, relying on virtual full screen:", err);
+        });
+      }
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch((err) => {
+          console.log("Error exiting browser fullscreen:", err);
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isNowFullscreen = !!document.fullscreenElement;
+      setIsStreamFullscreen(isNowFullscreen);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
   
   // Custom video streaming controls
   const [streamQuality, setStreamQuality] = useState<'low' | 'medium' | 'high'>('medium');
@@ -91,36 +157,15 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   const [streamTitleInput, setStreamTitleInput] = useState<string>("");
   const [streamSource, setStreamSource] = useState<'screen' | 'webcam'>('screen');
   const [localStreamObject, setLocalStreamObject] = useState<MediaStream | null>(null);
-  const [localWebcamStreamObject, setLocalWebcamStreamObject] = useState<MediaStream | null>(null);
-  const [localScreenStreamObject, setLocalScreenStreamObject] = useState<MediaStream | null>(null);
   const [showGoLiveModal, setShowGoLiveModal] = useState<boolean>(false);
   const [koochakError, setKoochakError] = useState<string>("");
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
-
-  // Viewer frame loading & stats
-  const [latestFrameSrc, setLatestFrameSrc] = useState<string | null>(null);
-  const [fpsCounter, setFpsCounter] = useState<number>(0);
-  const [viewerLatency, setViewerLatency] = useState<number>(0);
 
   // Media references
   const koochakVideoRef = useRef<HTMLVideoElement>(null);
   const koochakMediaStreamRef = useRef<MediaStream | null>(null);
   const koochakChatEndRef = useRef<HTMLDivElement>(null);
-  const uploadIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const viewerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hiddenVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  // --- TALAR BOZORG (DISCORD) STATE ---
-  const [bozorgParticipants, setBozorgParticipants] = useState<TalarBozorgParticipant[]>([]);
-  const [bozorgMic, setBozorgMic] = useState<boolean>(true);
-  const [bozorgWebcam, setBozorgWebcam] = useState<boolean>(false);
-  const [bozorgScreen, setBozorgScreen] = useState<boolean>(false);
-  
-  const bozorgMicRef = useRef(bozorgMic);
-  const bozorgWebcamRef = useRef(bozorgWebcam);
-  const bozorgScreenRef = useRef(bozorgScreen);
-  const bozorgUploadIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetch("/api/livekit/config")
@@ -133,215 +178,6 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         setLivekitConfig({ isConfigured: false, url: "" });
       });
   }, []);
-
-  useEffect(() => {
-    bozorgMicRef.current = bozorgMic;
-  }, [bozorgMic]);
-
-  useEffect(() => {
-    bozorgWebcamRef.current = bozorgWebcam;
-  }, [bozorgWebcam]);
-
-  useEffect(() => {
-    bozorgScreenRef.current = bozorgScreen;
-  }, [bozorgScreen]);
-
-  useEffect(() => {
-    const applyBozorgConstraints = async () => {
-      let videoConstraints: any = {};
-      if (streamQuality === 'high') {
-        videoConstraints = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } };
-      } else if (streamQuality === 'low') {
-        videoConstraints = { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } };
-      } else {
-        videoConstraints = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
-      }
-      
-      if (localWebcamStreamRef.current) {
-        const track = localWebcamStreamRef.current.getVideoTracks()[0];
-        if (track && typeof track.applyConstraints === 'function') {
-          try {
-            await track.applyConstraints(videoConstraints);
-          } catch (e) {
-            console.warn("Failed to apply dynamic constraints to webcam:", e);
-          }
-        }
-      }
-      if (localScreenStreamRef.current) {
-        const track = localScreenStreamRef.current.getVideoTracks()[0];
-        if (track && typeof track.applyConstraints === 'function') {
-          try {
-            await track.applyConstraints(videoConstraints);
-          } catch (e) {
-            console.warn("Failed to apply dynamic constraints to screen share:", e);
-          }
-        }
-      }
-    };
-    applyBozorgConstraints();
-  }, [streamQuality]);
-
-  // --- TALAR BOZORG FRAME UPLOAD LOOP ---
-  useEffect(() => {
-    if (selectedHall !== 'bozorg') {
-      if (bozorgUploadIntervalRef.current) {
-        clearTimeout(bozorgUploadIntervalRef.current);
-        bozorgUploadIntervalRef.current = null;
-      }
-      return;
-    }
-
-    if (!bozorgWebcam && !bozorgScreen) {
-      if (bozorgUploadIntervalRef.current) {
-        clearTimeout(bozorgUploadIntervalRef.current);
-        bozorgUploadIntervalRef.current = null;
-      }
-      return;
-    }
-
-    // Clean up existing interval if any
-    if (bozorgUploadIntervalRef.current) {
-      clearTimeout(bozorgUploadIntervalRef.current);
-    }
-
-    const uploadBozorgFrames = async () => {
-      // Create offscreen canvas for resizing and compression
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-
-      const currentQuality = streamQualityRef.current;
-      let targetWidth = 480;
-      let targetHeight = 360;
-      let jpegQuality = 0.5;
-
-      if (currentQuality === "high") {
-        targetWidth = 800;
-        targetHeight = 600;
-        jpegQuality = 0.65;
-      } else if (currentQuality === "low") {
-        targetWidth = 320;
-        targetHeight = 240;
-        jpegQuality = 0.35;
-      }
-
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-
-      let webcamFrame: string | null = null;
-      let screenFrame: string | null = null;
-
-      // 1. Capture webcam frame if active
-      if (bozorgWebcam && localWebcamVideoRef.current && localWebcamStreamObject) {
-        const video = localWebcamVideoRef.current;
-        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-          ctx.fillStyle = "#000000";
-          ctx.fillRect(0, 0, targetWidth, targetHeight);
-          
-          const srcRatio = video.videoWidth / video.videoHeight;
-          const targetRatio = targetWidth / targetHeight;
-          let drawWidth = targetWidth;
-          let drawHeight = targetHeight;
-          let drawX = 0;
-          let drawY = 0;
-
-          if (srcRatio > targetRatio) {
-            drawHeight = targetWidth / srcRatio;
-            drawY = (targetHeight - drawHeight) / 2;
-          } else {
-            drawWidth = targetHeight * srcRatio;
-            drawX = (targetWidth - drawWidth) / 2;
-          }
-
-          ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
-          webcamFrame = canvas.toDataURL("image/jpeg", jpegQuality);
-        }
-      }
-
-      // 2. Capture screen share frame if active
-      if (bozorgScreen && localScreenVideoRef.current && localScreenStreamObject) {
-        const video = localScreenVideoRef.current;
-        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-          ctx.fillStyle = "#000000";
-          ctx.fillRect(0, 0, targetWidth, targetHeight);
-          
-          const srcRatio = video.videoWidth / video.videoHeight;
-          const targetRatio = targetWidth / targetHeight;
-          let drawWidth = targetWidth;
-          let drawHeight = targetHeight;
-          let drawX = 0;
-          let drawY = 0;
-
-          if (srcRatio > targetRatio) {
-            drawHeight = targetWidth / srcRatio;
-            drawY = (targetHeight - drawHeight) / 2;
-          } else {
-            drawWidth = targetHeight * srcRatio;
-            drawX = (targetWidth - drawWidth) / 2;
-          }
-
-          ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
-          screenFrame = canvas.toDataURL("image/jpeg", jpegQuality);
-        }
-      }
-
-      // 3. Upload frames to server
-      if (webcamFrame !== null || screenFrame !== null) {
-        try {
-          await fetch("/api/talar-bozorg/upload-frame", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              username: currentUser.username,
-              webcamFrame,
-              screenFrame
-            })
-          });
-        } catch (e) {
-          console.warn("Bozorg frame upload failed:", e);
-        }
-      }
-    };
-
-    // Run every intervalMs dynamically
-    const runLoop = () => {
-      uploadBozorgFrames().finally(() => {
-        const currentQuality = streamQualityRef.current;
-        let intervalMs = 500;
-        if (currentQuality === "high") intervalMs = 300;
-        else if (currentQuality === "low") intervalMs = 800;
-
-        if (selectedHall === 'bozorg' && (bozorgWebcam || bozorgScreen)) {
-          bozorgUploadIntervalRef.current = setTimeout(runLoop, intervalMs) as any;
-        }
-      });
-    };
-
-    bozorgUploadIntervalRef.current = setTimeout(runLoop, 500) as any;
-
-    return () => {
-      if (bozorgUploadIntervalRef.current) {
-        clearTimeout(bozorgUploadIntervalRef.current);
-        bozorgUploadIntervalRef.current = null;
-      }
-    };
-  }, [selectedHall, bozorgWebcam, bozorgScreen, localWebcamStreamObject, localScreenStreamObject]);
-
-  const [bozorgError, setBozorgError] = useState<string>("");
-  
-  // Real voice amplitude monitoring
-  const [localVoiceVolume, setLocalVoiceVolume] = useState<number>(0);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
-  const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const joinedBozorgTimeRef = useRef<number>(0);
-  const playedAudioChunksRef = useRef<Set<string>>(new Set());
-
-  const localWebcamVideoRef = useRef<HTMLVideoElement>(null);
-  const localScreenVideoRef = useRef<HTMLVideoElement>(null);
-  const localWebcamStreamRef = useRef<MediaStream | null>(null);
-  const localScreenStreamRef = useRef<MediaStream | null>(null);
 
   // --- MAIN TALAR POLLERS & LOGIC ---
 
@@ -360,180 +196,15 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         setKoochakChat(chatData.chat || []);
       }
     } catch (err) {
-      console.warn("Could not load stream status (offline or server starting):", err);
+      console.warn("Could not load stream status:", err);
     } finally {
       setKoochakLoading(false);
     }
   };
 
-  // View frame from server
-  const fetchLatestFrame = async () => {
-    if (isLocalSharing) return; // Streamer doesn't need to fetch their own frame
-    const start = Date.now();
-    try {
-      const res = await fetch(selectedHall === 'koochak2' ? "/api/stream2/frame" : "/api/stream/frame");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.frame) {
-          setLatestFrameSrc(data.frame);
-          setViewerLatency(Date.now() - start);
-        }
-        
-        // Play audio chunks for Koochak/Koochak2
-        if (data.audioChunks && data.audioChunks.length > 0) {
-          data.audioChunks.forEach((chunk: any) => {
-            if (chunk.timestamp > joinedKoochakTimeRef.current - 1500 && !playedKoochakAudioChunksRef.current.has(chunk.id)) {
-              playedKoochakAudioChunksRef.current.add(chunk.id);
-              
-              const audio = new Audio(chunk.data);
-              audio.play().catch(e => {
-                console.warn(`Could not play koochak audio chunk:`, e);
-              });
-            }
-          });
-        }
-      } else {
-        // No frame available or stream stopped
-        setLatestFrameSrc(null);
-      }
-    } catch (err) {
-      setLatestFrameSrc(null);
-    }
-  };
-
-  // Talar Bozorg (Discord Stage) loading & polling
-  const loadBozorgParticipants = async () => {
-    try {
-      const res = await fetch("/api/talar-bozorg/participants");
-      if (res.ok) {
-        const data = await res.json();
-        const participants = data.participants || [];
-        setBozorgParticipants(participants);
-
-        // Non-P2P audio chunk playing engine
-        participants.forEach((part: any) => {
-          if (part.username !== currentUser.username && part.audioChunks && part.audioChunks.length > 0) {
-            part.audioChunks.forEach((chunk: any) => {
-              // Ensure we only play fresh chunks that were uploaded after we joined, and which haven't been played yet
-              if (chunk.timestamp > joinedBozorgTimeRef.current - 1500 && !playedAudioChunksRef.current.has(chunk.id)) {
-                playedAudioChunksRef.current.add(chunk.id);
-                
-                const audio = new Audio(chunk.data);
-                audio.play().catch(e => {
-                  console.warn(`Could not play voice chunk from ${part.username}:`, e);
-                });
-              }
-            });
-          }
-        });
-      }
-    } catch (err) {
-      console.warn("Could not load voice participants:", err);
-    }
-  };
-
-  const joinBozorg = async () => {
-    try {
-      joinedBozorgTimeRef.current = Date.now();
-      playedAudioChunksRef.current.clear();
-      await fetch("/api/talar-bozorg/join", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: currentUser.username,
-          micActive: bozorgMic,
-          webcamActive: bozorgWebcam,
-          screenActive: bozorgScreen
-        })
-      });
-      loadBozorgParticipants();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const leaveBozorg = async () => {
-    try {
-      await fetch("/api/talar-bozorg/leave", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: currentUser.username })
-      });
-      stopBozorgMedia();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const updateBozorgStatusOnBackend = async (mic: boolean, cam: boolean, scr: boolean) => {
-    try {
-      await fetch("/api/talar-bozorg/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: currentUser.username,
-          micActive: mic,
-          webcamActive: cam,
-          screenActive: scr
-        })
-      });
-      loadBozorgParticipants();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Clean up Talar Bozorg audio & media tracks
-  const stopBozorgMedia = () => {
-    if (bozorgUploadIntervalRef.current) {
-      clearTimeout(bozorgUploadIntervalRef.current);
-      bozorgUploadIntervalRef.current = null;
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch (e) {}
-      mediaRecorderRef.current = null;
-    }
-    playedAudioChunksRef.current.clear();
-    if (localWebcamStreamRef.current) {
-      localWebcamStreamRef.current.getTracks().forEach(t => t.stop());
-      localWebcamStreamRef.current = null;
-    }
-    if (localScreenStreamRef.current) {
-      localScreenStreamRef.current.getTracks().forEach(t => t.stop());
-      localScreenStreamRef.current = null;
-    }
-    if (audioIntervalRef.current) {
-      clearInterval(audioIntervalRef.current);
-      audioIntervalRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
-    setBozorgWebcam(false);
-    setBozorgScreen(false);
-    setLocalWebcamStreamObject(null);
-    setLocalScreenStreamObject(null);
-    setLocalVoiceVolume(0);
-
-    // Clear frames on server so they do not linger for other users
-    fetch("/api/talar-bozorg/upload-frame", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: currentUser.username,
-        webcamFrame: null,
-        screenFrame: null
-      })
-    }).catch((e) => console.warn("Failed to clear server-side frames:", e));
-  };
-
   // Manage room switching
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    let bozorgPollInterval: NodeJS.Timeout;
     
     // Disconnect previous LiveKit room if any
     if (livekitRoomRef.current) {
@@ -542,13 +213,8 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       livekitRoomRef.current = null;
     }
     setLivekitVideoTrack(null);
-    setBozorgTracks({});
 
     if (selectedHall === 'koochak' || selectedHall === 'koochak2') {
-      // Initialize small hall audio chunk tracking
-      playedKoochakAudioChunksRef.current.clear();
-      joinedKoochakTimeRef.current = Date.now();
-
       loadKoochakData();
       interval = setInterval(loadKoochakData, 3000);
       
@@ -561,267 +227,91 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             if (!response.ok) return;
             const { token, serverUrl } = await response.json();
             
-            const room = new Room();
+            // Fire-wall optimized configurations for secure grey-cloud transport tunnels (Iran Infrastructure)
+            const room = new Room({
+              adaptiveStream: true,
+              dynacast: true,
+              publishDefaults: {
+                simulcast: true,
+                dtx: true,
+              }
+            });
             livekitRoomRef.current = room;
 
             room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
               if (track.kind === "video") {
                 setLivekitVideoTrack(track);
               } else if (track.kind === "audio") {
-                track.attach();
+                const element = track.attach();
+                element.id = `livekit-audio-${participant.sid}-${track.sid}`;
+                document.body.appendChild(element);
+                // Auto-play immediately on attachment to bypass browser constraints
+                element.play().catch(e => console.warn("Autoplay muted/blocked:", e));
               }
             });
 
             room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
               if (track.kind === "video") {
                 setLivekitVideoTrack(null);
+              } else if (track.kind === "audio") {
+                const element = document.getElementById(`livekit-audio-${participant.sid}-${track.sid}`);
+                if (element) {
+                  element.remove();
+                }
+                track.detach();
               }
             });
 
-            await room.connect(serverUrl || livekitConfig.url, token);
+            // Optimize rtcConfig with large ICE candidate pool size to gather TURN TCP/TLS candidates rapidly over HTTPS/WSS
+            await room.connect(serverUrl || livekitConfig.url, token, {
+              autoSubscribe: true,
+              rtcConfig: {
+                iceCandidatePoolSize: 8,
+              }
+            });
             console.log(`Connected to LiveKit SFU room: ${roomName}`);
           } catch (err) {
-            console.warn("LiveKit connection failed, will use fallback:", err);
+            console.warn("LiveKit connection failed:", err);
           }
         };
         initLiveKit();
-      } else {
-        // Viewer polling for frames - fallback if LiveKit is not configured
-        viewerIntervalRef.current = setInterval(fetchLatestFrame, 450);
-      }
-    } else if (selectedHall === 'bozorg') {
-      joinBozorg();
-      
-      // Throttled participant and voice sync polling to optimize server load
-      bozorgPollInterval = setInterval(loadBozorgParticipants, 500);
-
-      // Slower status heartbeat (3000ms)
-      interval = setInterval(() => {
-        updateBozorgStatusOnBackend(bozorgMicRef.current, bozorgWebcamRef.current, bozorgScreenRef.current);
-      }, 3000);
-      
-      if (livekitConfig?.isConfigured) {
-        const initLiveKitBozorg = async () => {
-          try {
-            const response = await fetch(`/api/livekit/token?room=bozorg&identity=${currentUser.username}`);
-            if (!response.ok) return;
-            const { token, serverUrl } = await response.json();
-            
-            const room = new Room();
-            livekitRoomRef.current = room;
-
-            const updateBozorgTracks = () => {
-              const newTracks: Record<string, { camera?: any; screen?: any; audio?: any }> = {};
-              room.remoteParticipants.forEach((p) => {
-                const pIdentity = p.identity.toLowerCase();
-                const cameraPub = p.getTrackPublication(Track.Source.Camera);
-                const screenPub = p.getTrackPublication(Track.Source.ScreenShare);
-                const microphonePub = p.getTrackPublication(Track.Source.Microphone);
-
-                newTracks[pIdentity] = {
-                  camera: cameraPub?.isSubscribed ? cameraPub.videoTrack : undefined,
-                  screen: screenPub?.isSubscribed ? screenPub.videoTrack : undefined,
-                  audio: microphonePub?.isSubscribed ? microphonePub.audioTrack : undefined,
-                };
-              });
-              setBozorgTracks(newTracks);
-            };
-
-            room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-              if (track.kind === "audio") {
-                track.attach();
-              }
-              updateBozorgTracks();
-            });
-            room.on(RoomEvent.TrackUnsubscribed, () => updateBozorgTracks());
-            room.on(RoomEvent.ParticipantConnected, () => updateBozorgTracks());
-            room.on(RoomEvent.ParticipantDisconnected, () => updateBozorgTracks());
-
-            await room.connect(serverUrl || livekitConfig.url, token);
-            console.log(`Connected to LiveKit SFU Talar Bozorg`);
-            
-            // Sync initial states
-            if (bozorgMicRef.current) {
-              await room.localParticipant.setMicrophoneEnabled(true);
-            }
-          } catch (err) {
-            console.warn("LiveKit Bozorg connection failed:", err);
-          }
-        };
-        initLiveKitBozorg();
-      } else {
-        // Start fallback microphone feedback if LiveKit is not configured
-        startLocalAudioMonitoring();
       }
     }
 
     return () => {
       if (interval) clearInterval(interval);
-      if (bozorgPollInterval) clearInterval(bozorgPollInterval);
-      if (viewerIntervalRef.current) clearInterval(viewerIntervalRef.current);
-      if (selectedHall === 'bozorg') {
-        leaveBozorg();
-      }
     };
   }, [selectedHall, livekitConfig]);
 
   // Clean up all streams and recording intervals on unmount
   useEffect(() => {
     return () => {
-      if (uploadIntervalRef.current) clearTimeout(uploadIntervalRef.current);
-      if (viewerIntervalRef.current) clearInterval(viewerIntervalRef.current);
       if (livekitRoomRef.current) {
         livekitRoomRef.current.disconnect();
         livekitRoomRef.current = null;
       }
-      stopBozorgMedia();
       if (koochakMediaStreamRef.current) {
         koochakMediaStreamRef.current.getTracks().forEach(t => t.stop());
-      }
-      if (koochakMediaRecorderRef.current) {
-        try {
-          koochakMediaRecorderRef.current.stop();
-        } catch (e) {}
-        koochakMediaRecorderRef.current = null;
       }
     };
   }, []);
 
-  // Scroll chat
+  // Scroll chat only when a genuine new message arrives
   useEffect(() => {
-    koochakChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [koochakChat, selectedHall]);
-
-
-  // --- REAL MIC VOLUME MONITORING (Web Audio API) WITH NOISE SUPPRESSION & DSP FILTERING ---
-  const startLocalAudioMonitoring = async () => {
-    try {
-      if (audioContextRef.current) return;
-      
-      // Request microphone with native noise reduction, echo cancellation, and auto gain control
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          noiseSuppression: true,
-          echoCancellation: true,
-          autoGainControl: true
-        }
-      }).catch(() => null);
-
-      if (!stream) {
-        console.warn("Microphone access denied or unavailable.");
-        return;
-      }
-
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const source = audioCtx.createMediaStreamSource(stream);
-      
-      // 1. Highpass filter to eliminate low-frequency room noise, fan hums, and low-end background rumble
-      const highpass = audioCtx.createBiquadFilter();
-      highpass.type = "highpass";
-      highpass.frequency.value = 150; // Cut off frequencies below 150Hz
-      
-      // 2. Dynamics Compressor to act as a noise gate/reduction and level-normalizer
-      const compressor = audioCtx.createDynamicsCompressor();
-      compressor.threshold.value = -45; // Suppress signals lower than -45dB (acts as noise gate)
-      compressor.knee.value = 30;
-      compressor.ratio.value = 12;
-      compressor.attack.value = 0.003;
-      compressor.release.value = 0.25;
-
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      
-      // Build routing chain: Mic -> Highpass -> Compressor -> Analyser
-      source.connect(highpass);
-      highpass.connect(compressor);
-      compressor.connect(analyser);
-
-      // Create destination for fully filtered audio recording (P2P-free server-side audio)
-      const destination = audioCtx.createMediaStreamDestination();
-      compressor.connect(destination);
-
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-
-      audioContextRef.current = audioCtx;
-      audioAnalyserRef.current = analyser;
-
-      audioIntervalRef.current = setInterval(() => {
-        if (!bozorgMic) {
-          setLocalVoiceVolume(0);
-          return;
-        }
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          sum += dataArray[i];
-        }
-        const avg = sum / bufferLength;
-        
-        // Software-level noise gate: if volume level is below threshold, ignore as noise
-        let volume = Math.min(100, Math.round(avg * 1.8));
-        if (volume < 8) {
-          volume = 0;
-        }
-        setLocalVoiceVolume(volume);
-      }, 100);
-
-      // Initialize MediaRecorder on the filtered audio destination stream
-      let options = {};
-      if (typeof MediaRecorder !== "undefined") {
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-          options = { mimeType: "audio/webm;codecs=opus" };
-        } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
-          options = { mimeType: "audio/ogg;codecs=opus" };
-        }
-        
-        try {
-          const recorder = new MediaRecorder(destination.stream, options);
-          recorder.ondataavailable = async (event) => {
-            // Respect user mute status and verify valid data chunk
-            if (!bozorgMicRef.current || !event.data || event.data.size === 0) return;
-
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-              const base64Data = reader.result as string;
-              if (!base64Data) return;
-
-              try {
-                await fetch("/api/talar-bozorg/upload-audio", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    username: currentUser.username,
-                    chunk: {
-                      id: `${currentUser.username}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-                      data: base64Data,
-                      timestamp: Date.now()
-                    }
-                  })
-                });
-              } catch (err) {
-                console.warn("Audio chunk upload failed:", err);
-              }
-            };
-            reader.readAsDataURL(event.data);
-          };
-
-          // Record and upload in 750ms slices for optimal non-P2P audio performance
-          recorder.start(750);
-          mediaRecorderRef.current = recorder;
-        } catch (recorderErr) {
-          console.warn("Failed to start MediaRecorder on filtered audio stream:", recorderErr);
+    if (koochakChat.length > 0) {
+      const latestMsg = koochakChat[koochakChat.length - 1];
+      if (latestMsg.id !== lastKoochakMsgIdRef.current) {
+        lastKoochakMsgIdRef.current = latestMsg.id;
+        const container = koochakChatEndRef.current?.parentElement;
+        if (container) {
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: "smooth"
+          });
         }
       }
-
-    } catch (e) {
-      console.error("Error initializing audio context with noise reduction:", e);
     }
-  };
-
-
-  // --- TALAR KOOCHAK (YOUTUBE STREAM) ENGINE ---
-
+  }, [koochakChat, selectedHall]);
   const startKoochakStream = async () => {
     setKoochakError("");
     const titleToUse = streamTitleInput.trim() || 
@@ -885,56 +375,34 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       setIsLocalSharing(true);
       setShowGoLiveModal(false);
 
-      if (livekitConfig?.isConfigured) {
-        if (livekitRoomRef.current) {
-          const room = livekitRoomRef.current;
-          const videoTrack = stream.getVideoTracks()[0];
-          const audioTrack = stream.getAudioTracks()[0];
-          
-          if (videoTrack) {
-            await room.localParticipant.publishTrack(videoTrack, {
-              name: streamSource === "webcam" ? "camera" : "screen_share",
-            });
-          }
-          if (audioTrack) {
+      if (!livekitConfig?.isConfigured) {
+        setKoochakError("پیکربندی لایوکیت در سرور فعال نیست. لطفاً متغیرهای محیطی لایوکیت را روی سرور بررسی و تنظیم کنید.");
+        stopKoochakStream();
+        return;
+      }
+
+      if (livekitRoomRef.current) {
+        const room = livekitRoomRef.current;
+        const videoTrack = stream.getVideoTracks()[0];
+        const audioTrack = stream.getAudioTracks()[0];
+        
+        if (videoTrack) {
+          await room.localParticipant.publishTrack(videoTrack, {
+            name: streamSource === "webcam" ? "camera" : "screen_share",
+          });
+        }
+        if (audioTrack) {
+          // Force microphone track activation to bypass strict browser mute and autoplay policies
+          try {
+            await room.localParticipant.setMicrophoneEnabled(true);
+            console.log("Forced microphone track activation via setMicrophoneEnabled");
+          } catch (micErr) {
+            console.warn("setMicrophoneEnabled failed, publishing track manually:", micErr);
             await room.localParticipant.publishTrack(audioTrack, {
               name: "microphone",
             });
           }
         }
-
-        // Register live stream on server
-        await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            isLive: true,
-            streamer: currentUser.username,
-            title: titleToUse,
-            streamType: streamSource,
-            streamUrl: "",
-            quality: streamQuality
-          })
-        });
-
-        // Send a system chat message to announce stream
-        await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: "system",
-            username: "سیستم",
-            text: `📢 ${currentUser.username} پخش زنده جدیدی را در ${
-              selectedHall === 'koochak2' ? 'تالار کوچک ۲' : 'تالار کوچک ۱'
-            } با کیفیت ${
-              streamQuality === 'high' ? 'بالا (1080p)' : streamQuality === 'low' ? 'کاهش‌یافته (360p)' : 'متوسط (720p)'
-            } با عنوان «${titleToUse}» آغاز کرد!`,
-            type: selectedHall === 'koochak2' ? "stream2" : "stream"
-          })
-        });
-
-        loadKoochakData();
-        return; // Skip fallback capturing and encoding loops!
       }
 
       // Register live stream on server
@@ -967,190 +435,6 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         })
       });
 
-      // Set up audio recording/uploading for livestream audio transmission
-      if (stream.getAudioTracks().length > 0) {
-        const audioOnlyStream = new MediaStream(stream.getAudioTracks());
-        let options = {};
-        if (typeof MediaRecorder !== "undefined") {
-          if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-            options = { mimeType: "audio/webm;codecs=opus" };
-          } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
-            options = { mimeType: "audio/ogg;codecs=opus" };
-          }
-          try {
-            const recorder = new MediaRecorder(audioOnlyStream, options);
-            recorder.ondataavailable = async (event) => {
-              if (!event.data || event.data.size === 0) return;
-              const reader = new FileReader();
-              reader.onloadend = async () => {
-                const base64Data = reader.result as string;
-                if (!base64Data) return;
-                try {
-                  await fetch(selectedHall === 'koochak2' ? "/api/stream2/upload-audio" : "/api/stream/upload-audio", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      username: currentUser.username,
-                      chunk: {
-                        id: `${currentUser.username}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-                        data: base64Data,
-                        timestamp: Date.now()
-                      }
-                    })
-                  });
-                } catch (err) {
-                  console.warn("Failed uploading audio chunk for koochak stream:", err);
-                }
-              };
-              reader.readAsDataURL(event.data);
-            };
-            recorder.start(750); // Slice every 750ms for low latency
-            koochakMediaRecorderRef.current = recorder;
-          } catch (recErr) {
-            console.warn("Could not start MediaRecorder for koochak audio:", recErr);
-          }
-        }
-      }
-
-      // Setup hidden canvas and frame capture loop
-      const canvas = document.createElement("canvas");
-      canvasRef.current = canvas;
-      
-      const videoElement = document.createElement("video");
-      videoElement.srcObject = stream;
-      videoElement.muted = true;
-      videoElement.playsInline = true;
-      videoElement.setAttribute("autoplay", "true");
-      videoElement.setAttribute("playsinline", "true");
-      
-      // Hidden video element style hack so browsers never freeze/suspend background frame decoding
-      videoElement.style.position = "fixed";
-      videoElement.style.top = "0";
-      videoElement.style.left = "0";
-      videoElement.style.width = "400px"; // Larger than 1px to prevent browser-engine layout suspension
-      videoElement.style.height = "300px";
-      videoElement.style.opacity = "0.001";
-      videoElement.style.pointerEvents = "none";
-      videoElement.style.zIndex = "-9999";
-      document.body.appendChild(videoElement);
-      hiddenVideoRef.current = videoElement;
-      
-      videoElement.play().catch(e => console.warn("videoElement.play() failed/interrupted:", e));
- 
-      // Using willReadFrequently optimizes frequent readbacks (like calling toDataURL) in 2D canvas context
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
- 
-      let framesUploaded = 0;
-      let lastFpsCheck = Date.now();
- 
-      const uploadFrame = async () => {
-        // Stop if stream is closed or cleared
-        if (!koochakMediaStreamRef.current) return;
- 
-        const activeSource = koochakVideoRef.current || videoElement;
-        if (!ctx || !activeSource) {
-          uploadIntervalRef.current = setTimeout(uploadFrame, 100) as any;
-          return;
-        }
- 
-        // Skip drawing if media is not fully loaded/ready (prevents black screen artifacts)
-        if (activeSource.readyState < 2 || activeSource.videoWidth === 0) {
-          uploadIntervalRef.current = setTimeout(uploadFrame, 100) as any;
-          return;
-        }
- 
-        if (activeSource.paused) {
-          activeSource.play().catch(() => {});
-        }
- 
-        // Configure resolution and delay dynamically based on live quality state
-        const currentQuality = streamQualityRef.current;
-        let targetWidth = 480;
-        let targetHeight = 360;
-        let jpegQuality = 0.5;
-        let uploadIntervalMs = 400; // default medium (~2.5 FPS)
- 
-        if (currentQuality === "high") {
-          targetWidth = 800;
-          targetHeight = 600;
-          jpegQuality = 0.65;
-          uploadIntervalMs = 250; // ~4 FPS
-        } else if (currentQuality === "low") {
-          targetWidth = 320;
-          targetHeight = 240;
-          jpegQuality = 0.35;
-          uploadIntervalMs = 650; // ~1.5 FPS
-        }
- 
-        if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-          canvas.width = targetWidth;
-          canvas.height = targetHeight;
-        }
- 
-        try {
-          const videoWidth = activeSource.videoWidth;
-          const videoHeight = activeSource.videoHeight;
- 
-          if (videoWidth > 0 && videoHeight > 0) {
-            // Fill background with black to avoid canvas leftovers
-            ctx.fillStyle = "#000000";
-            ctx.fillRect(0, 0, targetWidth, targetHeight);
- 
-            // Compute correct aspect ratio (fit style drawing)
-            const srcRatio = videoWidth / videoHeight;
-            const targetRatio = targetWidth / targetHeight;
- 
-            let drawWidth = targetWidth;
-            let drawHeight = targetHeight;
-            let drawX = 0;
-            let drawY = 0;
- 
-            if (srcRatio > targetRatio) {
-              drawHeight = targetWidth / srcRatio;
-              drawY = (targetHeight - drawHeight) / 2;
-            } else {
-              drawWidth = targetHeight * srcRatio;
-              drawX = (targetWidth - drawWidth) / 2;
-            }
- 
-            ctx.drawImage(activeSource, drawX, drawY, drawWidth, drawHeight);
-          } else {
-            ctx.drawImage(activeSource, 0, 0, targetWidth, targetHeight);
-          }
-          
-          // Compress as JPEG string
-          const base64Frame = canvas.toDataURL("image/jpeg", jpegQuality);
- 
-          // Upload to server
-          await fetch(selectedHall === 'koochak2' ? "/api/stream2/upload-frame" : "/api/stream/upload-frame", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              frame: base64Frame,
-              username: currentUser.username
-            })
-          });
-          framesUploaded++;
-          
-          const now = Date.now();
-          if (now - lastFpsCheck >= 1000) {
-            setFpsCounter(framesUploaded);
-            framesUploaded = 0;
-            lastFpsCheck = now;
-          }
-        } catch (e) {
-          console.warn("Frame upload failed:", e);
-        }
-
-        // Schedule the next frame only after this frame has finished (safeguard against overlapping connections)
-        if (koochakMediaStreamRef.current) {
-          uploadIntervalRef.current = setTimeout(uploadFrame, uploadIntervalMs) as any;
-        }
-      };
-
-      // Start the dynamic sequential loop
-      uploadIntervalRef.current = setTimeout(uploadFrame, 200) as any;
-
       loadKoochakData();
 
     } catch (err: any) {
@@ -1180,19 +464,9 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   };
 
   const stopKoochakStream = async () => {
-    if (uploadIntervalRef.current) {
-      clearTimeout(uploadIntervalRef.current);
-      uploadIntervalRef.current = null;
-    }
     if (koochakMediaStreamRef.current) {
       koochakMediaStreamRef.current.getTracks().forEach(t => t.stop());
       koochakMediaStreamRef.current = null;
-    }
-    if (koochakMediaRecorderRef.current) {
-      try {
-        koochakMediaRecorderRef.current.stop();
-      } catch (e) {}
-      koochakMediaRecorderRef.current = null;
     }
     setLocalStreamObject(null);
     if (koochakVideoRef.current) {
@@ -1205,7 +479,6 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       hiddenVideoRef.current = null;
     }
     setIsLocalSharing(false);
-    setFpsCounter(0);
 
     if (livekitConfig?.isConfigured) {
       if (livekitRoomRef.current) {
@@ -1220,21 +493,43 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
           fetch(`/api/livekit/token?room=${roomName}&identity=${currentUser.username}`)
             .then(res => res.json())
             .then(async ({ token, serverUrl }) => {
-              const room = new Room();
+              const room = new Room({
+                adaptiveStream: true,
+                dynacast: true,
+                publishDefaults: {
+                  simulcast: true,
+                  dtx: true,
+                }
+              });
               livekitRoomRef.current = room;
               room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
                 if (track.kind === "video") {
                   setLivekitVideoTrack(track);
                 } else if (track.kind === "audio") {
-                  track.attach();
+                  const element = track.attach();
+                  element.id = `livekit-audio-${participant.sid}-${track.sid}`;
+                  document.body.appendChild(element);
+                  // Auto-play immediately on attachment to bypass browser constraints
+                  element.play().catch(e => console.warn("Autoplay muted/blocked:", e));
                 }
               });
               room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
                 if (track.kind === "video") {
                   setLivekitVideoTrack(null);
+                } else if (track.kind === "audio") {
+                  const element = document.getElementById(`livekit-audio-${participant.sid}-${track.sid}`);
+                  if (element) {
+                    element.remove();
+                  }
+                  track.detach();
                 }
               });
-              await room.connect(serverUrl || livekitConfig.url, token);
+              await room.connect(serverUrl || livekitConfig.url, token, {
+                autoSubscribe: true,
+                rtcConfig: {
+                  iceCandidatePoolSize: 8,
+                }
+              });
             }).catch(e => console.warn("Re-joining room failed:", e));
         }
       }, 1000);
@@ -1263,9 +558,364 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     }
   };
 
-  const handleSendKoochakChat = async (e: React.FormEvent) => {
+  const handleSendKoochakChat = async (e?: React.FormEvent, customText?: string) => {
+    if (e) e.preventDefault();
+    const textToSend = customText !== undefined ? customText : koochakInput.trim();
+    if (!textToSend) return;
+
+    if (customText === undefined) {
+      setKoochakInput("");
+    }
+
+    const payload: any = {
+      userId: currentUser.id,
+      username: currentUser.username,
+      text: textToSend,
+      type: selectedHall === 'koochak2' ? "stream2" : "stream"
+    };
+
+    if (koochakReplyTo) {
+      payload.replyToId = koochakReplyTo.id;
+      payload.replyToUser = koochakReplyTo.username;
+      payload.replyToText = koochakReplyTo.text;
+      setKoochakReplyTo(null);
+    }
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const newMsg = await res.json();
+        setKoochakChat(prev => [...prev, newMsg]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleKoochakGifUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "image/gif") {
+      alert("لطفاً فقط فایل با پسوند GIF آپلود کنید.");
+      return;
+    }
+
+    setKoochakUploadingGif(true);
+    setKoochakGifSelectorOpen(false);
+
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Data = reader.result as string;
+        const uploadRes = await fetch("/api/upload-media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            fileData: base64Data
+          })
+        });
+
+        if (uploadRes.ok) {
+          const data = await uploadRes.json();
+          if (data.url) {
+            handleSendKoochakChat(undefined, data.url);
+          }
+        } else {
+          alert("آپلود گیف با خطا مواجه شد.");
+        }
+        setKoochakUploadingGif(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Failed to upload GIF file:", err);
+      setKoochakUploadingGif(false);
+    }
+  };
+
+  // --- TALAR BOZORG CONTROLLER ACTIONS & POLLING ---
+
+  const loadBozorgData = async () => {
+    try {
+      // 1. Fetch participants
+      const partRes = await fetch("/api/talar-bozorg/participants");
+      if (partRes.ok) {
+        const data = await partRes.json();
+        setBozorgParticipants(data.participants || []);
+      }
+      
+      // 2. Fetch chat
+      const chatRes = await fetch("/api/chat?type=bozorgan");
+      if (chatRes.ok) {
+        const data = await chatRes.json();
+        setBozorgChat(data.chat || []);
+      }
+
+      // 3. Fetch quotes
+      const quotesRes = await fetch("/api/quotes");
+      if (quotesRes.ok) {
+        const data = await quotesRes.json();
+        setBozorgQuotes(data.quotes || []);
+      }
+    } catch (err) {
+      console.warn("Error loading Talar Bozorg data:", err);
+    } finally {
+      setBozorgLoading(false);
+    }
+  };
+
+  // Manage join, leave and polling
+  useEffect(() => {
+    if (selectedHall !== 'bozorg') return;
+
+    setBozorgLoading(true);
+    setBozorgError("");
+    loadBozorgData();
+    const interval = setInterval(loadBozorgData, 1500);
+
+    // Auto join on entry
+    fetch("/api/talar-bozorg/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: currentUser.username,
+        micActive: bozorgMicActive,
+        webcamActive: bozorgWebcamActive,
+        screenActive: bozorgScreenActive
+      })
+    }).then(() => {
+      setIsBozorgJoined(true);
+    }).catch(e => console.warn("Failed to join Talar Bozorg", e));
+
+    return () => {
+      clearInterval(interval);
+      // Leave on exit
+      fetch("/api/talar-bozorg/leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: currentUser.username })
+      }).catch(e => console.warn("Failed to leave Talar Bozorg", e));
+      setIsBozorgJoined(false);
+      
+      // Stop webcam
+      if (bozorgWebcamStreamRef.current) {
+        bozorgWebcamStreamRef.current.getTracks().forEach(track => track.stop());
+        bozorgWebcamStreamRef.current = null;
+      }
+      if (bozorgWebcamIntervalRef.current) {
+        clearInterval(bozorgWebcamIntervalRef.current);
+        bozorgWebcamIntervalRef.current = null;
+      }
+
+      // Stop screen
+      if (bozorgScreenStreamRef.current) {
+        bozorgScreenStreamRef.current.getTracks().forEach(track => track.stop());
+        bozorgScreenStreamRef.current = null;
+      }
+      if (bozorgScreenIntervalRef.current) {
+        clearInterval(bozorgScreenIntervalRef.current);
+        bozorgScreenIntervalRef.current = null;
+      }
+    };
+  }, [selectedHall]);
+
+  // Status changes
+  const handleUpdateBozorgStatus = async (mic: boolean, webcam: boolean, screen: boolean) => {
+    setBozorgMicActive(mic);
+    setBozorgWebcamActive(webcam);
+    setBozorgScreenActive(screen);
+
+    try {
+      await fetch("/api/talar-bozorg/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: currentUser.username,
+          micActive: mic,
+          webcamActive: webcam,
+          screenActive: screen
+        })
+      });
+    } catch (err) {
+      console.warn("Failed to update status on server:", err);
+    }
+  };
+
+  // Web camera capture & upload effect
+  useEffect(() => {
+    if (selectedHall === 'bozorg' && bozorgWebcamActive && isBozorgJoined) {
+      navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
+        .then(stream => {
+          bozorgWebcamStreamRef.current = stream;
+          
+          const webcamVideo = document.createElement("video");
+          webcamVideo.srcObject = stream;
+          webcamVideo.play().catch(e => console.warn(e));
+
+          const canvas = document.createElement("canvas");
+          canvas.width = 320;
+          canvas.height = 240;
+          const ctx = canvas.getContext("2d");
+
+          bozorgWebcamIntervalRef.current = setInterval(() => {
+            if (webcamVideo && ctx && stream.active) {
+              try {
+                ctx.drawImage(webcamVideo, 0, 0, 320, 240);
+                const frame = canvas.toDataURL("image/jpeg", 0.5);
+                
+                fetch("/api/talar-bozorg/upload-frame", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    username: currentUser.username,
+                    webcamFrame: frame
+                  })
+                }).catch(e => console.warn("Frame upload error:", e));
+              } catch (e) {
+                console.warn("Canvas capture error:", e);
+              }
+            }
+          }, 1500);
+        })
+        .catch(err => {
+          console.warn("Failed to get camera for Talar Bozorg:", err);
+          setBozorgError("دسترسی به دوربین برقرار نشد.");
+          setBozorgWebcamActive(false);
+          handleUpdateBozorgStatus(bozorgMicActive, false, bozorgScreenActive);
+        });
+    } else {
+      if (bozorgWebcamStreamRef.current) {
+        bozorgWebcamStreamRef.current.getTracks().forEach(track => track.stop());
+        bozorgWebcamStreamRef.current = null;
+      }
+      if (bozorgWebcamIntervalRef.current) {
+        clearInterval(bozorgWebcamIntervalRef.current);
+        bozorgWebcamIntervalRef.current = null;
+      }
+      if (selectedHall === 'bozorg' && isBozorgJoined) {
+        fetch("/api/talar-bozorg/upload-frame", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: currentUser.username,
+            webcamFrame: null
+          })
+        }).catch(e => console.warn(e));
+      }
+    }
+
+    return () => {
+      if (bozorgWebcamStreamRef.current) {
+        bozorgWebcamStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (bozorgWebcamIntervalRef.current) {
+        clearInterval(bozorgWebcamIntervalRef.current);
+      }
+    };
+  }, [bozorgWebcamActive, isBozorgJoined, selectedHall]);
+
+  // Screen share capture & upload effect
+  useEffect(() => {
+    if (selectedHall === 'bozorg' && bozorgScreenActive && isBozorgJoined) {
+      navigator.mediaDevices.getDisplayMedia({ video: { width: 640, height: 480 } })
+        .then(stream => {
+          bozorgScreenStreamRef.current = stream;
+          
+          stream.getVideoTracks()[0].onended = () => {
+            setBozorgScreenActive(false);
+            handleUpdateBozorgStatus(bozorgMicActive, bozorgWebcamActive, false);
+          };
+
+          const screenVideo = document.createElement("video");
+          screenVideo.srcObject = stream;
+          screenVideo.play().catch(e => console.warn(e));
+
+          const canvas = document.createElement("canvas");
+          canvas.width = 640;
+          canvas.height = 480;
+          const ctx = canvas.getContext("2d");
+
+          bozorgScreenIntervalRef.current = setInterval(() => {
+            if (screenVideo && ctx && stream.active) {
+              try {
+                ctx.drawImage(screenVideo, 0, 0, 640, 480);
+                const frame = canvas.toDataURL("image/jpeg", 0.4);
+                
+                fetch("/api/talar-bozorg/upload-frame", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    username: currentUser.username,
+                    screenFrame: frame
+                  })
+                }).catch(e => console.warn("Screen frame upload error:", e));
+              } catch (e) {
+                console.warn("Screen capture error:", e);
+              }
+            }
+          }, 2000);
+        })
+        .catch(err => {
+          console.warn("Failed to display screen capture:", err);
+          setBozorgScreenActive(false);
+          handleUpdateBozorgStatus(bozorgMicActive, bozorgWebcamActive, false);
+        });
+    } else {
+      if (bozorgScreenStreamRef.current) {
+        bozorgScreenStreamRef.current.getTracks().forEach(track => track.stop());
+        bozorgScreenStreamRef.current = null;
+      }
+      if (bozorgScreenIntervalRef.current) {
+        clearInterval(bozorgScreenIntervalRef.current);
+        bozorgScreenIntervalRef.current = null;
+      }
+      if (selectedHall === 'bozorg' && isBozorgJoined) {
+        fetch("/api/talar-bozorg/upload-frame", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: currentUser.username,
+            screenFrame: null
+          })
+        }).catch(e => console.warn(e));
+      }
+    }
+
+    return () => {
+      if (bozorgScreenStreamRef.current) {
+        bozorgScreenStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (bozorgScreenIntervalRef.current) {
+        clearInterval(bozorgScreenIntervalRef.current);
+      }
+    };
+  }, [bozorgScreenActive, isBozorgJoined, selectedHall]);
+
+  // Scroll bozorg chat
+  useEffect(() => {
+    if (selectedHall === 'bozorg') {
+      const container = bozorgChatEndRef.current?.parentElement;
+      if (container) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: "smooth"
+        });
+      }
+    }
+  }, [bozorgChat, selectedHall, bozorgActiveTab]);
+
+  const handleSendBozorgChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!koochakInput.trim()) return;
+    if (!bozorgChatInput.trim()) return;
+
+    const text = bozorgChatInput.trim();
+    setBozorgChatInput("");
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -1273,189 +923,61 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         body: JSON.stringify({
           userId: currentUser.id,
           username: currentUser.username,
-          text: koochakInput.trim(),
-          type: selectedHall === 'koochak2' ? "stream2" : "stream"
+          text,
+          type: "bozorgan"
         })
       });
       if (res.ok) {
         const newMsg = await res.json();
-        setKoochakChat(prev => [...prev, newMsg]);
-        setKoochakInput("");
+        setBozorgChat(prev => [...prev, newMsg]);
       }
     } catch (err) {
-      console.error(err);
+      console.warn("Failed to send bozorg chat:", err);
     }
   };
 
+  const handleAddQuote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuoteText.trim() || !newQuoteAuthor.trim()) return;
 
-  // --- TALAR BOZORG (DISCORD) ACTIONS ---
-
-  const handleToggleBozorgMic = async () => {
-    const nextVal = !bozorgMic;
-    setBozorgMic(nextVal);
-    updateBozorgStatusOnBackend(nextVal, bozorgWebcam, bozorgScreen);
-
-    if (livekitConfig?.isConfigured && livekitRoomRef.current) {
-      try {
-        await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(nextVal);
-      } catch (err) {
-        console.warn("LiveKit microphone toggle failed:", err);
+    try {
+      const res = await fetch("/api/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: newQuoteText.trim(),
+          author: newQuoteAuthor.trim(),
+          submittedBy: currentUser.nickname || currentUser.username
+        })
+      });
+      if (res.ok) {
+        setNewQuoteText("");
+        setNewQuoteAuthor("");
+        // Reload quotes
+        const quotesRes = await fetch("/api/quotes");
+        if (quotesRes.ok) {
+          const data = await quotesRes.json();
+          setBozorgQuotes(data.quotes || []);
+        }
       }
+    } catch (err) {
+      console.warn("Failed to add quote:", err);
     }
   };
 
-  const handleToggleBozorgWebcam = async () => {
-    if (livekitConfig?.isConfigured && livekitRoomRef.current) {
-      try {
-        setBozorgError("");
-        const nextVal = !bozorgWebcam;
-        await livekitRoomRef.current.localParticipant.setCameraEnabled(nextVal);
-        setBozorgWebcam(nextVal);
-        updateBozorgStatusOnBackend(bozorgMic, nextVal, bozorgScreen);
-      } catch (err: any) {
-        console.error(err);
-        setBozorgError(`خطا در دوربین لایوکیت: ${err.message || err.name}`);
+  const handleDeleteQuote = async (id: string) => {
+    try {
+      const res = await fetch(`/api/quotes/${id}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        setBozorgQuotes(prev => prev.filter(q => q.id !== id));
       }
-      return;
-    }
-
-    if (bozorgWebcam) {
-      if (localWebcamStreamRef.current) {
-        localWebcamStreamRef.current.getTracks().forEach(t => t.stop());
-        localWebcamStreamRef.current = null;
-      }
-      setLocalWebcamStreamObject(null);
-      setBozorgWebcam(false);
-      updateBozorgStatusOnBackend(bozorgMic, false, bozorgScreen);
-    } else {
-      try {
-        setBozorgError("");
-        
-        // Define quality constraints
-        let videoConstraints: any = { video: true, audio: false };
-        if (streamQuality === "high") {
-          videoConstraints = {
-            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
-            audio: false
-          };
-        } else if (streamQuality === "low") {
-          videoConstraints = {
-            video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } },
-            audio: false
-          };
-        } else {
-          videoConstraints = {
-            video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-            audio: false
-          };
-        }
-
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
-        } catch (e) {
-          console.warn("Retrying with simple video constraints fallback:", e);
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        }
-        localWebcamStreamRef.current = stream;
-        setLocalWebcamStreamObject(stream);
-        setBozorgWebcam(true);
-        updateBozorgStatusOnBackend(bozorgMic, true, bozorgScreen);
-      } catch (err: any) {
-        console.error(err);
-        let friendlyError = "امکان دسترسی به وب‌کم وجود ندارد.";
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          friendlyError = "مجوز دسترسی به دوربین (وب‌کم) داده نشد. لطفاً از طریق آیکون قفل کنار آدرس‌بار مرورگر، دسترسی دوربین را فعال کنید.";
-        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-          friendlyError = "سخت‌افزار دوربین یا وب‌کم روی سیستم شما یافت نشد.";
-        } else if (err.name === "NotReadableError") {
-          friendlyError = "وب‌کم شما هم‌اکنون توسط نرم‌افزار دیگری در حال استفاده است.";
-        }
-        setBozorgError(friendlyError);
-      }
+    } catch (err) {
+      console.warn("Failed to delete quote:", err);
     }
   };
 
-  const handleToggleBozorgScreen = async () => {
-    if (livekitConfig?.isConfigured && livekitRoomRef.current) {
-      try {
-        setBozorgError("");
-        const nextVal = !bozorgScreen;
-        await livekitRoomRef.current.localParticipant.setScreenShareEnabled(nextVal);
-        setBozorgScreen(nextVal);
-        updateBozorgStatusOnBackend(bozorgMic, bozorgWebcam, nextVal);
-      } catch (err: any) {
-        console.error(err);
-        setBozorgError(`خطا در اشتراک‌گذاری صفحه لایوکیت: ${err.message || err.name}`);
-      }
-      return;
-    }
-
-    if (bozorgScreen) {
-      if (localScreenStreamRef.current) {
-        localScreenStreamRef.current.getTracks().forEach(t => t.stop());
-        localScreenStreamRef.current = null;
-      }
-      setLocalScreenStreamObject(null);
-      setBozorgScreen(false);
-      updateBozorgStatusOnBackend(bozorgMic, bozorgWebcam, false);
-    } else {
-      try {
-        setBozorgError("");
-
-        // Define quality constraints
-        let screenConstraints: any = { video: true, audio: false };
-        if (streamQuality === "high") {
-          screenConstraints = {
-            video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
-            audio: false
-          };
-        } else if (streamQuality === "low") {
-          screenConstraints = {
-            video: { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
-            audio: false
-          };
-        } else {
-          screenConstraints = {
-            video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-            audio: false
-          };
-        }
-
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getDisplayMedia(screenConstraints);
-        } catch (e) {
-          console.warn("Retrying with simple display constraints fallback due to:", e);
-          stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-        }
-        localScreenStreamRef.current = stream;
-        setLocalScreenStreamObject(stream);
-        setBozorgScreen(true);
-        updateBozorgStatusOnBackend(bozorgMic, bozorgWebcam, true);
-
-        stream.getVideoTracks()[0].onended = () => {
-          setLocalScreenStreamObject(null);
-          setBozorgScreen(false);
-          updateBozorgStatusOnBackend(bozorgMic, bozorgWebcam, false);
-        };
-      } catch (err: any) {
-        console.error(err);
-        let friendlyError = "خطا در اشتراک‌گذاری صفحه دسکتاپ.";
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          friendlyError = "اشتراک‌گذاری صفحه نمایش لغو شد یا مجوز امنیتی آن رد شد. به دلیل محدودیت‌های امنیتی مرورگر درون iframe، لطفا برای اشتراک‌گذاری صفحه نمایش دسکتاپ، برنامه را در یک «تب جدید» (New Tab) باز کنید.";
-        } else if (err.name === "SecurityError") {
-          friendlyError = "مرورگر به دلایل امنیتی دسترسی به صفحه نمایش درون iframe را مسدود کرده است. برنامه را در تب جدید باز کنید.";
-        }
-        setBozorgError(friendlyError);
-      }
-    }
-  };
-
-  const handleLeaveBozorg = async () => {
-    await leaveBozorg();
-    setSelectedHall('none');
-  };
 
   const getInitials = (name: string) => {
     return name ? name.substring(0, 2).toUpperCase() : "کاربر";
@@ -1473,15 +995,25 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     <div className="min-h-screen bg-black text-[#f3f4f6] font-sans flex flex-col h-[calc(100vh-32px)] overflow-hidden select-none pt-8">
       
       {/* Dynamic Navigation Header */}
-      <div className="bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-900/60 sticky top-8 z-40 px-4 py-3 md:px-8 shadow-md shrink-0">
+      <div className="bg-zinc-950/90 backdrop-blur-xl border-b border-zinc-900/60 relative z-20 px-4 py-3 md:px-8 shadow-md shrink-0">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <button
-            onClick={selectedHall !== 'none' ? () => setSelectedHall('none') : onBack}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-zinc-900/40 border border-zinc-850 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{selectedHall !== 'none' ? "بازگشت به انتخاب تالار" : "بازگشت به هاب اصلی"}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-zinc-900/40 border border-zinc-850 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>بازگشت به هاب اصلی</span>
+            </button>
+            {selectedHall !== 'none' && (
+              <button
+                onClick={() => setSelectedHall('none')}
+                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-3 py-1.5 rounded-xl transition-all cursor-pointer font-bold"
+              >
+                <span>تغییر تالار نمایش</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             {selectedHall === 'bozorg' ? (
@@ -1513,49 +1045,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             <div className="space-y-2">
               <h2 className="text-2xl md:text-3xl font-black text-white">به تالار نمایش خوش آمدید</h2>
               <p className="text-xs md:text-sm text-zinc-400 max-w-xl mx-auto leading-relaxed">
-                نوع تالار خود را انتخاب کنید. بدون نیاز به برنامه‌های جانبی (مانند OBS)، همه‌چیز مستقیم از طریق مرورگر شما روی سرور آپلود و پخش می‌شود:
+                تالار مورد نظر خود را انتخاب کنید. همه‌چیز مستقیم از طریق مرورگر شما روی سرور پخش می‌شود:
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 max-w-3xl mx-auto">
               
-              {/* Talar Bozorg Card */}
-              <motion.div
-                whileHover={{ y: -4, scale: 1.01 }}
-                className="bg-gradient-to-br from-zinc-950 to-purple-950/20 border border-purple-900/30 rounded-3xl p-6 text-right flex flex-col justify-between space-y-6 relative overflow-hidden group shadow-xl"
-              >
-                <div className="absolute top-0 right-0 w-24 h-24 bg-purple-600/10 rounded-full blur-2xl group-hover:bg-purple-600/20 transition-all duration-500"></div>
-
-                <div className="space-y-4">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-950/50 border border-purple-800/40 flex items-center justify-center text-purple-400 shadow-inner">
-                    <Users className="w-6 h-6 animate-pulse" />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <h3 className="text-lg font-extrabold text-white flex items-center justify-end gap-2">
-                      <span className="text-xs bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded-md border border-purple-800/30">اتصال صوتی همگانی</span>
-                      <span>تالار بزرگ (دیسکوردی)</span>
-                    </h3>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      یک فضای چندرسانه‌ای گروهی مانند دیسکورد. در این تالار هر کاربری که وارد شود می‌تواند میکروفون خود را باز کند، صدای خود را پخش کند و وب‌کم یا صفحه نمایش خود را به اشتراک بگذارد.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap justify-end gap-1.5 pt-1">
-                    <span className="text-[10px] bg-zinc-900 border border-purple-950/40 text-purple-300 px-2 py-1 rounded-lg">صوت آزاد همگانی</span>
-                    <span className="text-[10px] bg-zinc-900 border border-purple-950/40 text-purple-300 px-2 py-1 rounded-lg">دوربین همزمان چندنفره</span>
-                    <span className="text-[10px] bg-zinc-900 border border-purple-950/40 text-purple-300 px-2 py-1 rounded-lg">داده موقت (عدم ذخیره‌سازی)</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setSelectedHall('bozorg')}
-                  className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white rounded-xl cursor-pointer transition-all active:scale-[0.98] shadow-lg shadow-purple-950/50"
-                >
-                  ورود به تالار بزرگ دیسکوردی
-                </button>
-              </motion.div>
-
               {/* Talar Koochak Card */}
               <motion.div
                 whileHover={{ y: -4, scale: 1.01 }}
@@ -1632,394 +1127,6 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
             </div>
           </div>
-        </div>
-      )}
-
-
-      {/* VIEW: TALAR BOZORG (DISCORD) */}
-      {selectedHall === 'bozorg' && (
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-[#07050a]">
-          
-          {/* Main voice cells grid */}
-          <div className="flex-1 flex flex-col p-4 overflow-y-auto space-y-4">
-            
-            {bozorgError && (
-              <div className="bg-rose-950/30 border border-rose-900/50 p-3 rounded-xl text-xs text-rose-400 text-right flex items-center justify-end gap-2 shrink-0">
-                <span>{bozorgError}</span>
-                <AlertCircle className="w-4 h-4 shrink-0" />
-              </div>
-            )}
-
-            {/* Grid of real users */}
-            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[300px]">
-              
-              {/* ME - Voice Stage Card */}
-              <div className={`relative rounded-2xl overflow-hidden bg-zinc-950 border transition-all duration-300 p-4 flex flex-col items-center justify-center min-h-[160px] shadow-lg ${
-                localVoiceVolume > 15 ? "border-emerald-500 shadow-emerald-950/20" : "border-zinc-900"
-              }`}>
-                
-                {/* Real Webcam Feedback */}
-                {bozorgWebcam ? (
-                  <video
-                    ref={(el) => {
-                      (localWebcamVideoRef as any).current = el;
-                      if (el && localWebcamStreamObject && el.srcObject !== localWebcamStreamObject) {
-                        el.srcObject = localWebcamStreamObject;
-                        el.play().catch(e => console.warn("webcam playback failed:", e));
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="absolute inset-0 w-full h-full object-cover rounded-2xl"
-                  />
-                ) : null}
-
-                {/* Speaker indicator animations */}
-                <div className="relative z-10 flex flex-col items-center space-y-3">
-                  {!bozorgWebcam && (
-                    <div className="relative">
-                      {localVoiceVolume > 15 && (
-                        <div 
-                          className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping"
-                          style={{ transform: `scale(${1.2 + localVoiceVolume / 100})` }}
-                        ></div>
-                      )}
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 border border-purple-500/40 flex items-center justify-center text-white text-lg font-bold shadow-lg">
-                        {getInitials(currentUser.username)}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="text-center bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg">
-                    <div className="text-xs font-black text-white flex items-center justify-center gap-1.5">
-                      <span className="bg-purple-900/60 text-purple-300 text-[8px] px-1.5 py-0.5 rounded border border-purple-800/40">شما</span>
-                      <span>{currentUser.username}</span>
-                    </div>
-                    {localVoiceVolume > 15 && (
-                      <span className="text-[9px] text-emerald-400 mt-0.5 block font-mono">Volume: {localVoiceVolume}%</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Top corner media states */}
-                <div className="absolute top-2.5 left-2.5 flex items-center gap-1 z-20">
-                  <span className={`p-1.5 rounded-lg ${bozorgMic ? "bg-emerald-950/80 text-emerald-400" : "bg-zinc-900/80 text-zinc-500"} text-[9px]`}>
-                    {bozorgMic ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5 text-zinc-600" />}
-                  </span>
-                  <span className={`p-1.5 rounded-lg ${bozorgWebcam ? "bg-indigo-950/80 text-indigo-400" : "bg-zinc-900/80 text-zinc-500"} text-[9px]`}>
-                    {bozorgWebcam ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5 text-zinc-600" />}
-                  </span>
-                </div>
-
-                {/* Active user state tag */}
-                <div className="absolute bottom-2.5 right-2.5 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-lg border border-zinc-900/80 z-20">
-                  <span className="text-[9px] text-zinc-300 font-mono">
-                    {bozorgWebcam ? "Webcam Active" : bozorgMic ? "Speaking..." : "Muted"}
-                  </span>
-                </div>
-              </div>
-
-              {/* ME - Screen sharing output card */}
-              {bozorgScreen && (
-                <div className="relative rounded-2xl overflow-hidden bg-zinc-950 border border-amber-600/30 p-2 flex flex-col items-center justify-center min-h-[160px] shadow-lg sm:col-span-2">
-                  <video
-                    ref={(el) => {
-                      (localScreenVideoRef as any).current = el;
-                      if (el && localScreenStreamObject && el.srcObject !== localScreenStreamObject) {
-                        el.srcObject = localScreenStreamObject;
-                        el.play().catch(e => console.warn("screen share playback failed:", e));
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-contain rounded-xl bg-black"
-                  />
-                  <div className="absolute top-4 right-4 bg-amber-600/90 text-black text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
-                    <Monitor className="w-3 h-3" />
-                    <span>در حال اشتراک‌گذاری صفحه شما</span>
-                  </div>
-                </div>
-              )}
-
-              {/* OTHER REAL ACTIVE USERS */}
-              {bozorgParticipants.filter(p => p.username !== currentUser.username).map(part => {
-                const hasLiveKitWebcam = livekitConfig?.isConfigured && bozorgTracks[part.username.toLowerCase()]?.camera;
-                return (
-                  <div key={part.username} className="relative rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-900 p-4 flex flex-col items-center justify-center min-h-[160px] shadow-lg">
-                    
-                    {/* Real Webcam Feedback */}
-                    {hasLiveKitWebcam ? (
-                      <div className="absolute inset-0 w-full h-full rounded-2xl overflow-hidden z-0">
-                        <LiveKitTrackRenderer track={bozorgTracks[part.username.toLowerCase()]?.camera} />
-                      </div>
-                    ) : part.webcamActive && part.webcamFrame ? (
-                      <img
-                        src={part.webcamFrame}
-                        referrerPolicy="no-referrer"
-                        className="absolute inset-0 w-full h-full object-cover rounded-2xl"
-                        alt={`${part.username} webcam`}
-                      />
-                    ) : null}
-
-                    <div className="relative z-10 flex flex-col items-center space-y-3">
-                      {!(hasLiveKitWebcam || (part.webcamActive && part.webcamFrame)) && (
-                        <div className="relative">
-                          {part.micActive && (
-                            <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping"></div>
-                          )}
-                          <div className="w-16 h-16 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300 text-lg font-bold shadow-lg">
-                            {getInitials(part.username)}
-                          </div>
-                        </div>
-                      )}
-                      <div className="text-center bg-black/50 backdrop-blur-sm px-2 py-1 rounded-lg">
-                        <h4 className="text-xs font-bold text-white">{part.username}</h4>
-                        <p className="text-[9px] text-zinc-300 mt-1">
-                          {part.webcamActive ? "دوربین فعال" : part.screenActive ? "اشتراک‌گذاری صفحه" : "صوت فعال"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1 z-20">
-                      <span className={`p-1.5 rounded-lg ${part.micActive ? "bg-emerald-950/80 text-emerald-400" : "bg-zinc-900/80 text-zinc-500"} text-[9px]`}>
-                        {part.micActive ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5 text-zinc-600" />}
-                      </span>
-                      <span className={`p-1.5 rounded-lg ${part.webcamActive ? "bg-indigo-950/80 text-indigo-400" : "bg-zinc-900/80 text-zinc-500"} text-[9px]`}>
-                        {part.webcamActive ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5 text-zinc-600" />}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* OTHER PARTICIPANTS' SCREEN SHARES */}
-              {livekitConfig?.isConfigured 
-                ? Object.entries(bozorgTracks)
-                    .filter(([uname, tracks]) => uname !== currentUser.username.toLowerCase() && (tracks as any).screen)
-                    .map(([uname, tracks]) => (
-                      <div key={`${uname}-screen`} className="relative rounded-2xl overflow-hidden bg-zinc-950 border border-amber-600/30 p-2 flex flex-col items-center justify-center min-h-[160px] shadow-lg sm:col-span-2">
-                        <LiveKitTrackRenderer track={(tracks as any).screen} />
-                        <div className="absolute top-4 right-4 bg-amber-600/90 text-black text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
-                          <Monitor className="w-3 h-3" />
-                          <span>صفحه نمایش اشتراک‌گذاری شده توسط {uname}</span>
-                        </div>
-                      </div>
-                    ))
-                : bozorgParticipants.filter(p => p.username !== currentUser.username && p.screenActive && p.screenFrame).map(part => (
-                    <div key={`${part.username}-screen`} className="relative rounded-2xl overflow-hidden bg-zinc-950 border border-amber-600/30 p-2 flex flex-col items-center justify-center min-h-[160px] shadow-lg sm:col-span-2">
-                      <img
-                        src={part.screenFrame || undefined}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-contain rounded-xl bg-black"
-                        alt={`${part.username} screen`}
-                      />
-                      <div className="absolute top-4 right-4 bg-amber-600/90 text-black text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 shadow">
-                        <Monitor className="w-3 h-3" />
-                        <span>صفحه نمایش اشتراک‌گذاری شده توسط {part.username}</span>
-                      </div>
-                    </div>
-                  ))
-              }
-
-              {/* EMPTY STATE IF ALONE (Only real users exist!) */}
-              {bozorgParticipants.filter(p => p.username !== currentUser.username).length === 0 && (
-                <div className="sm:col-span-2 lg:col-span-2 border border-dashed border-zinc-800/80 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-3 bg-zinc-950/10">
-                  <div className="w-12 h-12 bg-zinc-900/80 border border-zinc-800/80 rounded-full flex items-center justify-center text-purple-400">
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-zinc-300">شما تنها فرد حاضر در این تالار هستید</h4>
-                    <p className="text-[10px] text-zinc-500 mt-1 max-w-xs leading-relaxed">
-                      این بخش از نوع داده‌های موقتی است و اطلاعات دائمی ذخیره نمی‌شود. لینک را برای دوستان خود بفرستید تا ملحق شوند!
-                    </p>
-                  </div>
-                  <button
-                    onClick={copyRoomLink}
-                    className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800/80 text-[10px] px-3 py-1.5 rounded-lg transition-all cursor-pointer"
-                  >
-                    {copiedLink ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>لینک کپی شد!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>کپی لینک ورود</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-            </div>
-
-            {/* Bottom Controls Panel */}
-            <div className="bg-zinc-950/95 border border-zinc-900 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 z-10" dir="rtl">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleLeaveBozorg}
-                  className="px-4 py-2 bg-rose-650 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-rose-950/30 cursor-pointer"
-                >
-                  <PhoneOff className="w-4 h-4" />
-                  <span>قطع اتصال</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Voice toggle */}
-                <button
-                  onClick={handleToggleBozorgMic}
-                  className={`p-2.5 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
-                    bozorgMic 
-                      ? "bg-purple-950/40 border-purple-800 text-purple-400" 
-                      : "bg-zinc-900 border-zinc-850 text-zinc-500"
-                  }`}
-                  title={bozorgMic ? "قطع میکروفون" : "وصل میکروفون"}
-                >
-                  {bozorgMic ? <Mic className="w-4.5 h-4.5" /> : <MicOff className="w-4.5 h-4.5" />}
-                </button>
-
-                {/* Webcam toggle */}
-                <button
-                  onClick={handleToggleBozorgWebcam}
-                  className={`p-2.5 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
-                    bozorgWebcam 
-                      ? "bg-purple-950/40 border-purple-800 text-purple-400" 
-                      : "bg-zinc-900 border-zinc-850 text-zinc-500"
-                  }`}
-                  title={bozorgWebcam ? "خاموش کردن دوربین" : "روشن کردن دوربین"}
-                >
-                  {bozorgWebcam ? <Video className="w-4.5 h-4.5" /> : <VideoOff className="w-4.5 h-4.5" />}
-                </button>
-
-                {/* Screen Share toggle */}
-                <button
-                  onClick={handleToggleBozorgScreen}
-                  className={`p-2.5 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
-                    bozorgScreen 
-                      ? "bg-amber-950/40 border-amber-850 text-amber-400" 
-                      : "bg-zinc-900 border-zinc-850 text-zinc-500"
-                  }`}
-                  title={bozorgScreen ? "توقف شیر اسکرین" : "شیر اسکرین دسکتاپ"}
-                >
-                  <ScreenShare className="w-4.5 h-4.5" />
-                </button>
-
-                {/* Quality selector */}
-                <div className="flex items-center gap-1 bg-[#120f18] border border-zinc-900 p-1 rounded-xl mr-2">
-                  <span className="text-[10px] text-zinc-400 px-1.5">کیفیت:</span>
-                  <button
-                    onClick={() => setStreamQuality('low')}
-                    className={`text-[10px] px-2 py-1 rounded-lg transition-all cursor-pointer ${
-                      streamQuality === 'low'
-                        ? 'bg-purple-950/60 text-purple-400 border border-purple-900/30 font-bold'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    ۳۶۰p
-                  </button>
-                  <button
-                    onClick={() => setStreamQuality('medium')}
-                    className={`text-[10px] px-2 py-1 rounded-lg transition-all cursor-pointer ${
-                      streamQuality === 'medium'
-                        ? 'bg-purple-950/60 text-purple-400 border border-purple-900/30 font-bold'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    ۷۲۰p
-                  </button>
-                  <button
-                    onClick={() => setStreamQuality('high')}
-                    className={`text-[10px] px-2 py-1 rounded-lg transition-all cursor-pointer ${
-                      streamQuality === 'high'
-                        ? 'bg-purple-950/60 text-purple-400 border border-purple-900/30 font-bold'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    ۱۰۸۰p
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <span className="text-[10px] text-zinc-500 block font-bold">وضعیت تالار دیسکوردی:</span>
-                <span className="text-xs text-purple-300 font-extrabold">صوت و وب‌کم فعال همگانی</span>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Sidebar - Real Active Members List (No fake users!) */}
-          <div className="w-full md:w-64 border-t md:border-t-0 md:border-r border-zinc-900 bg-zinc-950/80 flex flex-col shrink-0">
-            <div className="p-4 border-b border-zinc-900 bg-zinc-950 flex items-center justify-between text-right shrink-0">
-              <span className="text-[9px] bg-purple-950 text-purple-400 border border-purple-900/40 font-mono px-2 py-0.5 rounded-full font-bold">
-                {bozorgParticipants.length} MEMBERS
-              </span>
-              <h3 className="text-xs font-black text-white flex items-center gap-1.5">
-                <span>اعضای صوتی آنلاین</span>
-                <Users className="w-4 h-4 text-purple-400" />
-              </h3>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-3" dir="rtl">
-              
-              {/* Me List item */}
-              <div className="flex items-center justify-between bg-purple-950/20 border border-purple-900/30 p-2.5 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shadow">
-                      {getInitials(currentUser.username)}
-                    </div>
-                    {bozorgMic && (
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-zinc-950"></span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-white block">{currentUser.username}</span>
-                    <span className="text-[9px] text-zinc-500 block">شما</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 text-zinc-400">
-                  {bozorgMic ? <Mic className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> : <MicOff className="w-3.5 h-3.5 text-zinc-600" />}
-                  {bozorgWebcam && <Video className="w-3.5 h-3.5 text-purple-400" />}
-                </div>
-              </div>
-
-              {/* Other real participants */}
-              {bozorgParticipants.filter(p => p.username !== currentUser.username).map(part => (
-                <div key={part.username} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-zinc-900/40 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">
-                        {getInitials(part.username)}
-                      </div>
-                      {part.micActive && (
-                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-zinc-950"></span>
-                      )}
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-zinc-300 block">{part.username}</span>
-                      <span className="text-[9px] text-zinc-500 block">آنلاین</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-zinc-400">
-                    {part.micActive ? <Mic className="w-3.5 h-3.5 text-emerald-400" /> : <MicOff className="w-3.5 h-3.5 text-zinc-600" />}
-                    {part.webcamActive && <Video className="w-3.5 h-3.5 text-purple-400" />}
-                  </div>
-                </div>
-              ))}
-
-              {/* Informational guide */}
-              <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-900 text-[10px] text-zinc-500 leading-relaxed text-center mt-4">
-                با بستن این صفحه یا خروج از تالار، اکانت شما به‌طور خودکار در کمتر از ۱۰ ثانیه از لیست اعضا حذف و تالار بازنشانی می‌شود.
-              </div>
-
-            </div>
-          </div>
-
         </div>
       )}
 
@@ -2128,8 +1235,34 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             )}
 
             {/* Live Player Screen */}
-            <div className="flex-1 min-h-[320px] bg-[#09070c] border border-zinc-900 rounded-3xl overflow-hidden relative flex flex-col justify-center items-center shadow-2xl">
+            <div 
+              ref={livePlayerContainerRef}
+              className={`transition-all duration-300 bg-[#09070c] border border-zinc-900 rounded-3xl overflow-hidden relative flex flex-col justify-center items-center shadow-2xl ${
+                isStreamFullscreen 
+                  ? "fixed inset-0 z-[99999] w-screen h-screen p-4 bg-black rounded-none" 
+                  : (isStreamZoomed ? "h-[580px] w-full" : "flex-1 min-h-[320px] w-full")
+              }`}
+            >
               
+              {/* Floating Fullscreen Overlay Button (Directly on Stream Screen) */}
+              <button
+                onClick={toggleFullscreen}
+                className="absolute top-14 left-4 z-50 flex items-center gap-1.5 bg-black/80 hover:bg-black text-white hover:text-red-400 text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-xl border border-zinc-800/80 cursor-pointer shadow-lg transition-all"
+                dir="rtl"
+              >
+                {isStreamFullscreen ? (
+                  <>
+                    <Minimize2 className="w-4 h-4 text-red-500" />
+                    <span>خروج از تمام‌صفحه</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-4 h-4 text-red-500" />
+                    <span>تمام‌صفحه</span>
+                  </>
+                )}
+              </button>
+
               {/* IF LOCAL STREAMER (SHOWS WHAT IS STREAMING) */}
               {isLocalSharing ? (
                 <div className="w-full h-full relative flex flex-col justify-center items-center bg-zinc-950">
@@ -2152,12 +1285,6 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                       <Radio className="w-3 h-3 animate-pulse" />
                       <span>درحال استریم روی سرور ({streamQuality.toUpperCase()})</span>
                     </span>
-
-                    <div className="flex gap-2">
-                      <span className="bg-black/85 text-zinc-300 text-[9px] font-mono px-2.5 py-1 rounded-full shadow border border-zinc-900">
-                        FPS: {fpsCounter}
-                      </span>
-                    </div>
                   </div>
                 </div>
               ) : streamStatus.isLive && livekitVideoTrack ? (
@@ -2169,7 +1296,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                   <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none" dir="rtl">
                     <span className="bg-emerald-600 text-white text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow">
                       <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
-                      <span>پخش زنده مستقیم SFU (LiveKit)</span>
+                      <span>پخش زنده مستقیم (LiveKit)</span>
                     </span>
 
                     <div className="flex gap-2">
@@ -2179,43 +1306,16 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                     </div>
                   </div>
                 </div>
-              ) : streamStatus.isLive && latestFrameSrc ? (
-                /* IF VIEWER & STREAM IS LIVE (SHOWS STREAM FROM SERVER) */
-                <div className="w-full h-full relative flex flex-col justify-center items-center bg-zinc-950">
-                  <img
-                    src={latestFrameSrc}
-                    alt="Live stream screen"
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-contain max-h-[80vh] bg-black"
-                  />
-                  
-                  {/* Stats overlay for viewers */}
-                  <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none" dir="rtl">
-                    <span className="bg-red-600 text-white text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow">
-                      <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
-                      <span>پخش زنده مستقیم از سرور</span>
-                    </span>
-
-                    <div className="flex gap-2">
-                      <span className="bg-black/85 text-zinc-400 text-[9px] font-mono px-2.5 py-1 rounded-full shadow border border-zinc-900">
-                        کیفیت: {streamStatus.quality === 'high' ? '1080p' : streamStatus.quality === 'low' ? '360p' : '720p'}
-                      </span>
-                      <span className="bg-black/85 text-emerald-400 text-[9px] font-mono px-2.5 py-1 rounded-full shadow border border-zinc-900">
-                        تاخیر سرور: {viewerLatency}ms
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : streamStatus.isLive && !latestFrameSrc ? (
-                /* IF STREAM LIVE BUT WAITING ON FIRST FRAME */
+              ) : streamStatus.isLive && !livekitVideoTrack ? (
+                /* IF STREAM LIVE BUT WAITING FOR SFU CONNECTION */
                 <div className="text-center p-8 space-y-4">
-                  <div className="w-12 h-12 bg-red-950/30 border border-red-900/30 rounded-full flex items-center justify-center text-red-400 mx-auto animate-spin">
+                  <div className="w-12 h-12 bg-rose-950/30 border border-rose-900/30 rounded-full flex items-center justify-center text-rose-400 mx-auto animate-spin">
                     <RefreshCw className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white">در حال دریافت فریم‌های ویدیو...</h3>
+                    <h3 className="text-sm font-bold text-white">در حال دریافت ویدیوی لایو کیت...</h3>
                     <p className="text-xs text-zinc-500 mt-1">
-                      تصویر در حال فشرده‌سازی و بارگذاری روی سرور بدون نیاز به برنامه‌های جانبی است.
+                      سیستم در حال برقراری اتصال امن با سرور رسانه LiveKit است. لطفا منتظر بمانید.
                     </p>
                   </div>
                 </div>
@@ -2255,6 +1355,39 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
             </div>
 
+            {/* Stream Zoom / Resize Controls Options */}
+            <div className="bg-zinc-950/80 border border-zinc-900/60 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-right shadow-md" dir="rtl">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer border border-red-500/20"
+                >
+                  {isStreamFullscreen ? (
+                    <>
+                      <Minimize2 className="w-4 h-4" />
+                      <span>خروج از تمام‌صفحه استریم</span>
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="w-4 h-4" />
+                      <span>تمام‌صفحه کردن استریم</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setIsStreamZoomed(!isStreamZoomed)}
+                  className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all border border-zinc-800 cursor-pointer shadow-md"
+                >
+                  <span>{isStreamZoomed ? "اندازه عادی نمایشگر" : "بزرگ‌کردن نمایشگر (داخل صفحه)"}</span>
+                </button>
+              </div>
+              <div className="flex flex-col text-right">
+                <span className="text-[11px] font-black text-white">تغییر اندازه نمایشگر پخش زنده</span>
+                <span className="text-[9px] text-zinc-500 mt-0.5">برای مشاهده با جزئیات بیشتر، پخش زنده را تمام‌صفحه کنید یا اندازه آن را تغییر دهید</span>
+              </div>
+            </div>
+
           </div>
 
           {/* Chat Panel for YouTube Livestream (Right side) */}
@@ -2269,7 +1402,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             </div>
 
             {/* Message window */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 max-h-[250px] lg:max-h-none">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 max-h-[250px] lg:max-h-none relative">
               {koochakLoading ? (
                 <p className="text-[10px] text-zinc-600 text-center py-8">در حال بارگذاری چت...</p>
               ) : koochakChat.length === 0 ? (
@@ -2278,6 +1411,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 koochakChat.map((msg) => {
                   const isMe = msg.username === currentUser.username;
                   const isSys = msg.username === "سیستم";
+                  const isGif = msg.text.startsWith("http") || msg.text.startsWith("/uploads") || msg.text.includes(".gif");
                   
                   if (isSys) {
                     return (
@@ -2288,18 +1422,49 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                   }
 
                   return (
-                    <div key={msg.id} className="text-right space-y-1">
+                    <div key={msg.id} className="text-right space-y-1 group/msg relative">
                       <div className="flex items-center justify-between text-[9px]">
                         <span className="text-zinc-600 font-mono">
                           {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
                         </span>
-                        <span className={`font-bold ${isMe ? "text-red-400" : "text-zinc-300"}`}>{msg.username}</span>
+                        
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setKoochakReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
+                            className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-0.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 rounded-md text-[8px] flex items-center gap-0.5 cursor-pointer"
+                            title="پاسخ"
+                          >
+                            <CornerUpLeft className="w-2.5 h-2.5" />
+                            <span>پاسخ</span>
+                          </button>
+                          <span className={`font-bold ${isMe ? "text-red-400" : "text-zinc-300"}`}>{msg.username}</span>
+                        </div>
                       </div>
-                      <div className={`p-2 rounded-xl text-xs break-words inline-block max-w-[90%] ${
-                        isMe ? "bg-red-950/20 text-red-100 border border-red-900/30 ml-auto block" : "bg-zinc-900 text-zinc-200"
-                      }`}>
-                        {msg.text}
-                      </div>
+
+                      {/* Reply Reference Panel */}
+                      {msg.replyToText && (
+                        <div className="bg-zinc-900/80 border-r border-red-500 pr-1.5 pl-1 py-0.5 rounded text-[8px] text-zinc-400 mb-0.5 leading-normal max-w-[90%] truncate mr-auto inline-block">
+                          پاسخ به <strong className="text-red-400">{msg.replyToUser}</strong>: {msg.replyToText}
+                        </div>
+                      )}
+
+                      {/* Message body (Image/GIF or Text) */}
+                      {isGif ? (
+                        <div className={`p-1 rounded-xl bg-zinc-900 border border-zinc-850 overflow-hidden shadow-md max-w-[90%] inline-block ${isMe ? "ml-auto block text-left" : ""}`}>
+                          <img
+                            src={msg.text}
+                            alt="uploaded gif"
+                            referrerPolicy="no-referrer"
+                            className="rounded-lg max-w-[150px] max-h-[120px] object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className={`p-2 rounded-xl text-xs break-words inline-block max-w-[90%] ${
+                          isMe ? "bg-red-950/20 text-red-100 border border-red-900/30 ml-auto block" : "bg-zinc-900 text-zinc-200"
+                        }`}>
+                          {msg.text}
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -2307,16 +1472,101 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               <div ref={koochakChatEndRef} />
             </div>
 
-            {/* Input Bar */}
-            <div className="bg-zinc-950 border-t border-zinc-900/80 p-3 shrink-0">
-              <form onSubmit={handleSendKoochakChat} className="flex gap-2">
+            {/* Uploading GIF status */}
+            {koochakUploadingGif && (
+              <div className="bg-red-950/30 border-t border-red-900/30 text-red-300 text-[9px] px-3 py-1.5 flex items-center gap-2 animate-pulse justify-center">
+                <Smile className="w-3.5 h-3.5 animate-spin" />
+                <span>در حال آپلود و ارسال GIF...</span>
+              </div>
+            )}
+
+            {/* Replying To Ribbon Bar */}
+            {koochakReplyTo && (
+              <div className="bg-red-950/40 border-t border-red-950/50 px-3 py-1.5 flex items-center justify-between text-[10px] text-red-300 shrink-0">
+                <div className="flex items-center gap-1 truncate">
+                  <CornerUpLeft className="w-3 h-3 shrink-0" />
+                  <span>پاسخ به <strong className="font-extrabold text-white">{koochakReplyTo.username}</strong>:</span>
+                  <span className="truncate max-w-[120px] text-[9px] text-zinc-500">"{koochakReplyTo.text}"</span>
+                </div>
                 <button
-                  type="submit"
-                  disabled={!koochakInput.trim()}
-                  className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-900 disabled:text-zinc-600 text-white p-2 rounded-xl transition-all cursor-pointer"
+                  onClick={() => setKoochakReplyTo(null)}
+                  className="p-0.5 hover:bg-red-900/20 rounded text-zinc-500 hover:text-white transition-colors cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5 scale-x-[-1]" />
+                  <X className="w-3 h-3" />
                 </button>
+              </div>
+            )}
+
+            {/* Input Bar */}
+            <div className="bg-zinc-950 border-t border-zinc-900/80 p-3 shrink-0 relative">
+              
+              {/* GIF Selector Box Overlay for Koochak */}
+              {koochakGifSelectorOpen && (
+                <div className="absolute bottom-[100%] right-3 left-3 bg-zinc-950 border border-zinc-900 rounded-2xl p-2.5 shadow-2xl space-y-2 z-30 mb-2">
+                  <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                    <span className="text-[9px] font-black text-red-400">انتخاب یا بارگذاری گیف</span>
+                    <button
+                      onClick={() => setKoochakGifSelectorOpen(false)}
+                      className="text-zinc-500 hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Preset GIFs grid */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PRESET_GIFS.map((g) => (
+                      <button
+                        key={g.name}
+                        onClick={() => {
+                          handleSendKoochakChat(undefined, g.url);
+                          setKoochakGifSelectorOpen(false);
+                        }}
+                        className="bg-zinc-900 hover:bg-red-950/10 border border-zinc-800 hover:border-red-900/25 rounded-lg p-1 text-center transition-all cursor-pointer relative group overflow-hidden"
+                      >
+                        <img
+                          src={g.url}
+                          alt={g.name}
+                          className="w-full h-8 object-cover rounded-md mb-0.5"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span className="text-[8px] text-zinc-500 font-bold group-hover:text-red-300">{g.name}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* File upload trigger */}
+                  <div className="border-t border-zinc-900 pt-2">
+                    <label className="flex items-center justify-center gap-1 bg-red-950/40 hover:bg-red-900/30 border border-red-900/30 rounded-lg px-2.5 py-1.5 cursor-pointer text-[9px] font-bold text-red-300 hover:text-white transition-all text-center">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>بارگذاری فایل GIF سفارشی</span>
+                      <input
+                        type="file"
+                        accept="image/gif"
+                        onChange={handleKoochakGifUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={(e) => handleSendKoochakChat(e)} className="flex gap-2">
+                
+                {/* GIF Selector trigger button */}
+                <button
+                  type="button"
+                  onClick={() => setKoochakGifSelectorOpen(!koochakGifSelectorOpen)}
+                  className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                    koochakGifSelectorOpen 
+                      ? "bg-red-900/20 border-red-700 text-red-400" 
+                      : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-800"
+                  }`}
+                  title="ارسال GIF"
+                >
+                  <Smile className="w-3.5 h-3.5" />
+                </button>
+
                 <input
                   type="text"
                   placeholder="نوشتن پیام در چت استریم..."
@@ -2324,6 +1574,13 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                   onChange={(e) => setKoochakInput(e.target.value)}
                   className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white text-right focus:outline-none focus:border-red-600"
                 />
+
+                <button
+                  type="submit"
+                  className="bg-red-600 hover:bg-red-500 text-white p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-md"
+                >
+                  <Send className="w-3.5 h-3.5 scale-x-[-1]" />
+                </button>
               </form>
             </div>
 
