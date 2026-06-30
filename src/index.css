@@ -13,24 +13,53 @@ html {
   scroll-behavior: smooth;
   background-color: #0c0a0f;
   color: #f3f4f6;
+  scrollbar-width: thin;
+  scrollbar-color: #3f3554 #0c0a0f;
 }
 
+/* Beautiful custom global scrollbar */
 ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0c0a0f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #272136;
+  border-radius: 9999px;
+  border: 2px solid #0c0a0f;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #493c66;
+}
+
+/* Specific class for ultra-smooth container scrolling and nice styling */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #4c377d #0d0b13;
+  scroll-behavior: smooth;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-::-webkit-scrollbar-track {
-  background: #121016;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #0d0b13;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #312e3b;
-  border-radius: 4px;
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3c2f5e;
+  border-radius: 9999px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #4a4659;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #5d4994;
 }
 
 @keyframes pulse-slow {

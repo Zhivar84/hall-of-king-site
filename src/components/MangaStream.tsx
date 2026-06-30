@@ -69,6 +69,60 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   const bozorgScreenIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bozorgChatEndRef = useRef<HTMLDivElement>(null);
 
+  // Synced live viewer counts state
+  const [viewers, setViewers] = useState({
+    koochak1: 0,
+    koochak2: 0,
+    bozorg: 0,
+  });
+
+  useEffect(() => {
+    const clientId = (() => {
+      let id = sessionStorage.getItem("manga_client_id");
+      if (!id) {
+        id = "c_" + Math.random().toString(36).substring(2, 11);
+        sessionStorage.setItem("manga_client_id", id);
+      }
+      return id;
+    })();
+
+    const updatePresence = async () => {
+      try {
+        const hallParam = selectedHall === 'koochak' ? 'koochak' : selectedHall === 'koochak2' ? 'koochak2' : selectedHall === 'bozorg' ? 'bozorg' : 'none';
+        const res = await fetch("/api/presence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId,
+            username: currentUser.username,
+            hall: hallParam
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.viewers) {
+            setViewers(data.viewers);
+            localStorage.setItem("manga_live_viewers", JSON.stringify(data.viewers));
+          }
+        }
+      } catch (e) {
+        console.warn("Could not sync stream presence:", e);
+      }
+    };
+
+    updatePresence();
+    const interval = setInterval(updatePresence, 3500);
+    return () => clearInterval(interval);
+  }, [currentUser, selectedHall]);
+
+  const [isLocalSharing, setIsLocalSharing] = useState<boolean>(false);
+  const [streamTitleInput, setStreamTitleInput] = useState<string>("");
+  const [streamSource, setStreamSource] = useState<'screen' | 'webcam'>('screen');
+  const [localStreamObject, setLocalStreamObject] = useState<MediaStream | null>(null);
+  const [showGoLiveModal, setShowGoLiveModal] = useState<boolean>(false);
+  const [koochakError, setKoochakError] = useState<string>("");
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+
   // --- LIVEKIT (SFU) STREAMING STATE ---
   const [livekitConfig, setLivekitConfig] = useState<{ isConfigured: boolean; url: string } | null>(null);
   const [livekitVideoTrack, setLivekitVideoTrack] = useState<any | null>(null);
@@ -127,14 +181,218 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
   const [streamVolume, setStreamVolume] = useState<number>(0.8);
   const [isStreamMuted, setIsStreamMuted] = useState<boolean>(false);
+  const [isMicMuted, setIsMicMuted] = useState<boolean>(false);
+  const [isGameMuted, setIsGameMuted] = useState<boolean>(false);
+
+  // --- REPLAY BUFFER / CLIP 2-MIN UTILITY STATE & LOGIC ---
+  const [isRecordingBuffer, setIsRecordingBuffer] = useState<boolean>(false);
+  const [recordedChunks, setRecordedChunks] = useState<{ blob: Blob; timestamp: number }[]>([]);
+  const [clipSuccessMessage, setClipSuccessMessage] = useState<string>("");
+  const [isSavingClip, setIsSavingClip] = useState<boolean>(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+  // Background Clip / Replay Buffer Engine
+  useEffect(() => {
+    const isLive = streamStatus.isLive;
+    let streamToRecord: MediaStream | null = null;
+
+    if (isLive) {
+      if (isLocalSharing && localStreamObject) {
+        streamToRecord = localStreamObject;
+      } else if (livekitVideoTrack && livekitVideoTrack.mediaStreamTrack) {
+        const tracks: MediaStreamTrack[] = [livekitVideoTrack.mediaStreamTrack];
+        
+        // Find and add any remote audio tracks
+        if (livekitRoomRef.current) {
+          livekitRoomRef.current.remoteParticipants.forEach(participant => {
+            participant.audioTrackPublications.forEach(pub => {
+              if (pub.isSubscribed && pub.audioTrack && pub.audioTrack.mediaStreamTrack) {
+                tracks.push(pub.audioTrack.mediaStreamTrack);
+              }
+            });
+          });
+        }
+        
+        streamToRecord = new MediaStream(tracks);
+      }
+    }
+
+    if (!streamToRecord) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (e) {}
+      }
+      mediaRecorderRef.current = null;
+      setRecordedChunks([]);
+      setIsRecordingBuffer(false);
+      return;
+    }
+
+    let recorder: MediaRecorder;
+    const chunks: { blob: Blob; timestamp: number }[] = [];
+    
+    try {
+      const options = { mimeType: "video/webm;codecs=vp8,opus" };
+      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) {
+        options.mimeType = "video/webm;codecs=vp9,opus";
+      } else if (MediaRecorder.isTypeSupported("video/webm")) {
+        options.mimeType = "video/webm";
+      } else if (MediaRecorder.isTypeSupported("video/mp4")) {
+        options.mimeType = "video/mp4";
+      }
+
+      recorder = new MediaRecorder(streamToRecord, options);
+    } catch (e) {
+      console.warn("Failed to create MediaRecorder with options, falling back to default:", e);
+      try {
+        recorder = new MediaRecorder(streamToRecord);
+      } catch (err) {
+        console.error("Failed to create MediaRecorder entirely:", err);
+        return;
+      }
+    }
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        const now = Date.now();
+        chunks.push({ blob: event.data, timestamp: now });
+        
+        // Keep only chunks from the last 2 minutes (120,000 milliseconds)
+        const twoMinutesAgo = now - 120000;
+        while (chunks.length > 0 && chunks[0].timestamp < twoMinutesAgo) {
+          chunks.shift();
+        }
+        
+        setRecordedChunks([...chunks]);
+      }
+    };
+
+    recorder.start(3000);
+    mediaRecorderRef.current = recorder;
+    setIsRecordingBuffer(true);
+
+    return () => {
+      if (recorder && recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+        } catch (e) {}
+      }
+      mediaRecorderRef.current = null;
+      setRecordedChunks([]);
+      setIsRecordingBuffer(false);
+    };
+  }, [streamStatus.isLive, isLocalSharing, localStreamObject, livekitVideoTrack]);
+
+  const handleSaveClip = async () => {
+    if (recordedChunks.length === 0) {
+      alert("هنوز داده‌ای برای ضبط ذخیره نشده است. لطفا چند ثانیه صبر کنید.");
+      return;
+    }
+
+    const now = Date.now();
+    const twoMinutesAgo = now - 120000;
+    const validChunks = recordedChunks.filter(c => c.timestamp >= twoMinutesAgo);
+
+    if (validChunks.length === 0) {
+      alert("هیچ کلیپی در ۲ دقیقه اخیر یافت نشد.");
+      return;
+    }
+
+    try {
+      setIsSavingClip(true);
+      setClipSuccessMessage("در حال فشرده‌سازی و بارگذاری کلیپ ۲ دقیقه‌ای روی تالار زمان... لطفاً منتظر بمانید.");
+
+      const mimeType = validChunks[0].blob.type || "video/webm";
+      const combinedBlob = new Blob(validChunks.map(c => c.blob), { type: mimeType });
+      
+      // 1. Convert to Base64
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(combinedBlob);
+      });
+
+      // 2. Upload to /api/upload-media
+      const filename = `clip_stream_${Date.now()}.webm`;
+      const uploadRes = await fetch("/api/upload-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: filename,
+          fileData: base64Data,
+        }),
+      });
+
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json();
+        throw new Error(errData.error || "خطا در آپلود کلیپ به سرور.");
+      }
+
+      const { url: mediaUrl } = await uploadRes.json();
+
+      // 3. Create a post in "Times" (تالار زمان)
+      const postPayload = {
+        title: `کلیپ زنده از استریم: ${streamStatus.title || "بدون نام"}`,
+        content: `این کلیپ ۲ دقیقه‌ای به صورت خودکار از استریم در حال پخش ضبط و در تالار زمان ثبت گردید. فرستنده استریم: ${streamStatus.streamer || "ناشناس"}`,
+        author: currentUser.username,
+        type: "times",
+        videoUrl: mediaUrl,
+      };
+
+      const postRes = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(postPayload),
+      });
+
+      if (!postRes.ok) {
+        throw new Error("خطا در ایجاد پست در تالار زمان.");
+      }
+
+      // Also download locally for user convenience
+      try {
+        const localUrl = URL.createObjectURL(combinedBlob);
+        const a = document.createElement("a");
+        a.href = localUrl;
+        a.download = `clip_2min_${Date.now()}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(localUrl);
+      } catch (err) {
+        console.warn("Could not trigger local download", err);
+      }
+
+      setClipSuccessMessage("کلیپ ۲ دقیقه اخیر با موفقیت ضبط، در تالار زمان به اشتراک گذاشته شد و دانلود گردید! 🎉");
+      setTimeout(() => setClipSuccessMessage(""), 7000);
+    } catch (err: any) {
+      console.error("Failed to save and upload clip:", err);
+      alert(`خطا در ذخیره‌سازی و ارسال کلیپ: ${err?.message || err}`);
+      setClipSuccessMessage("");
+    } finally {
+      setIsSavingClip(false);
+    }
+  };
 
   useEffect(() => {
     const audioElements = document.querySelectorAll('[id^="livekit-audio-"]');
     audioElements.forEach((el) => {
       const audioElement = el as HTMLAudioElement;
-      audioElement.volume = isStreamMuted ? 0 : streamVolume;
+      const trackName = audioElement.dataset.trackName || "";
+      const isScreenAudio = trackName === "screen_share_audio";
+
+      let finalMute = isStreamMuted;
+      if (isScreenAudio) {
+        if (isGameMuted) finalMute = true;
+      } else {
+        if (isMicMuted) finalMute = true;
+      }
+
+      audioElement.volume = finalMute ? 0 : streamVolume;
     });
-  }, [streamVolume, isStreamMuted]);
+  }, [streamVolume, isStreamMuted, isMicMuted, isGameMuted]);
   
   // Custom video streaming controls
   const [streamQuality, setStreamQuality] = useState<'low' | 'medium' | 'high'>('medium');
@@ -152,14 +410,6 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       }));
     }
   };
-
-  const [isLocalSharing, setIsLocalSharing] = useState<boolean>(false);
-  const [streamTitleInput, setStreamTitleInput] = useState<string>("");
-  const [streamSource, setStreamSource] = useState<'screen' | 'webcam'>('screen');
-  const [localStreamObject, setLocalStreamObject] = useState<MediaStream | null>(null);
-  const [showGoLiveModal, setShowGoLiveModal] = useState<boolean>(false);
-  const [koochakError, setKoochakError] = useState<string>("");
-  const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
   // Media references
   const koochakVideoRef = useRef<HTMLVideoElement>(null);
@@ -255,7 +505,19 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               } else if (track.kind === "audio") {
                 const element = track.attach();
                 element.id = `livekit-audio-${participant.sid}-${track.sid}`;
-                element.volume = isStreamMuted ? 0 : streamVolume;
+                
+                const trackName = publication.trackName || (track as any).name || "";
+                element.dataset.trackName = trackName;
+
+                const isScreenAudio = trackName === "screen_share_audio";
+                let finalMute = isStreamMuted;
+                if (isScreenAudio) {
+                  if (isGameMuted) finalMute = true;
+                } else {
+                  if (isMicMuted) finalMute = true;
+                }
+
+                element.volume = finalMute ? 0 : streamVolume;
                 document.body.appendChild(element);
                 // Auto-play immediately on attachment to bypass browser constraints
                 element.play().catch(e => console.warn("Autoplay muted/blocked:", e));
@@ -571,7 +833,19 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 } else if (track.kind === "audio") {
                   const element = track.attach();
                   element.id = `livekit-audio-${participant.sid}-${track.sid}`;
-                  element.volume = isStreamMuted ? 0 : streamVolume;
+                  
+                  const trackName = publication.trackName || (track as any).name || "";
+                  element.dataset.trackName = trackName;
+
+                  const isScreenAudio = trackName === "screen_share_audio";
+                  let finalMute = isStreamMuted;
+                  if (isScreenAudio) {
+                    if (isGameMuted) finalMute = true;
+                  } else {
+                    if (isMicMuted) finalMute = true;
+                  }
+
+                  element.volume = finalMute ? 0 : streamVolume;
                   document.body.appendChild(element);
                   // Auto-play immediately on attachment to bypass browser constraints
                   element.play().catch(e => console.warn("Autoplay muted/blocked:", e));
@@ -1137,7 +1411,10 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
                   <div className="space-y-1.5">
                     <h3 className="text-lg font-extrabold text-white flex items-center justify-end gap-2">
-                      <span className="text-xs bg-rose-900/40 text-rose-300 px-2 py-0.5 rounded-md border border-rose-800/30">آپلود سرور و پخش همزمان</span>
+                      <span className="text-[10px] bg-red-950 text-red-400 border border-red-900/30 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-sans font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                        <span>{viewers.koochak1} ویور زنده</span>
+                      </span>
                       <span>تالار کوچک ۱ (یوتیوبی)</span>
                     </h3>
                     <p className="text-xs text-zinc-400 leading-relaxed">
@@ -1174,7 +1451,10 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
                   <div className="space-y-1.5">
                     <h3 className="text-lg font-extrabold text-white flex items-center justify-end gap-2">
-                      <span className="text-xs bg-rose-900/40 text-rose-300 px-2 py-0.5 rounded-md border border-rose-800/30">اتاق دوم پخش همزمان</span>
+                      <span className="text-[10px] bg-red-950 text-red-400 border border-red-900/30 px-2.5 py-1 rounded-full flex items-center gap-1.5 font-sans font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                        <span>{viewers.koochak2} ویور زنده</span>
+                      </span>
                       <span>تالار کوچک ۲ (یوتیوبی)</span>
                     </h3>
                     <p className="text-xs text-zinc-400 leading-relaxed">
@@ -1277,9 +1557,9 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 <div className="text-right">
                   <div className="flex items-center gap-2 justify-end">
                     {streamStatus.isLive && (
-                      <span className="flex h-2 w-2 relative">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      <span className="flex items-center gap-1.5 bg-red-950/80 text-red-400 border border-red-900/45 px-2.5 py-1 rounded-full text-[10px] font-sans font-black mr-2 animate-pulse">
+                        <Eye className="w-3.5 h-3.5 text-red-500" />
+                        <span>{selectedHall === 'koochak2' ? viewers.koochak2 : viewers.koochak1} تماشاگر زنده</span>
                       </span>
                     )}
                     <h2 className="text-sm font-bold text-white">
@@ -1487,12 +1767,109 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                     {isStreamMuted ? "0%" : `${Math.round(streamVolume * 100)}%`}
                   </span>
                 </div>
+
+                {/* Instant Replay / 2-Min Clip Capture Button */}
+                <button
+                  onClick={handleSaveClip}
+                  disabled={recordedChunks.length === 0 || isSavingClip}
+                  className={`flex items-center gap-1.5 text-xs font-black px-4 py-2 rounded-xl transition-all shadow-md border ${
+                    isSavingClip
+                      ? "bg-amber-950/40 text-amber-500 border-amber-900/30 cursor-wait"
+                      : recordedChunks.length === 0
+                        ? "bg-zinc-900/45 text-zinc-600 border-zinc-900/50 cursor-not-allowed"
+                        : "bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white border-amber-500/20 cursor-pointer hover:shadow-amber-950/20"
+                  }`}
+                  title="ذخیره و دانلود ۲ دقیقه اخیر استریم به صورت کلیپ"
+                >
+                  {isSavingClip ? (
+                    <RefreshCw className="w-4 h-4 text-amber-500 animate-spin" />
+                  ) : (
+                    <Video className="w-4 h-4 text-amber-400" />
+                  )}
+                  <span>{isSavingClip ? "در حال ارسال به تالار زمان..." : "ضبط ۲ دقیقه قبل (بافر فعال)"}</span>
+                  {!isSavingClip && recordedChunks.length > 0 && (
+                    <span className="text-[9px] bg-black/40 text-yellow-300 px-1.5 py-0.5 rounded-md font-mono font-bold animate-pulse">
+                      {Math.min(120, Math.round((recordedChunks[recordedChunks.length - 1].timestamp - recordedChunks[0].timestamp) / 1000))}s
+                    </span>
+                  )}
+                </button>
               </div>
               <div className="flex flex-col text-right">
                 <span className="text-[11px] font-black text-white">تغییر اندازه و کنترل صدای پخش زنده</span>
                 <span className="text-[9px] text-zinc-500 mt-0.5">برای مشاهده روان با جزئیات بیشتر صفحه را تغییر دهید یا صدا را تنظیم کنید</span>
               </div>
             </div>
+
+            {/* Audio Source Separation Controls */}
+            <div className="bg-gradient-to-br from-zinc-950/90 to-zinc-900/90 border border-zinc-900/80 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 text-right shadow-lg" dir="rtl">
+              <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                
+                {/* Streamer Mic Control */}
+                <div className="flex items-center gap-2.5 bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-850 px-3 py-2 rounded-xl transition-all w-full sm:w-auto">
+                  <button
+                    onClick={() => setIsMicMuted(!isMicMuted)}
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                      isMicMuted 
+                        ? "bg-red-950/60 text-red-500 border border-red-900/30" 
+                        : "bg-emerald-950/30 text-emerald-400 border border-emerald-900/20"
+                    }`}
+                    title={isMicMuted ? "وصل کردن صدای میکروفون استریمر" : "قطع صدای میکروفون استریمر"}
+                  >
+                    {isMicMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  </button>
+                  <div className="flex flex-col text-right">
+                    <span className="text-[10px] font-bold text-zinc-300">صدای صحبت استریمر (میکروفون)</span>
+                    <span className={`text-[9px] ${!streamStatus.isLive ? "text-zinc-500" : isMicMuted ? "text-red-500 font-medium" : "text-emerald-500"}`}>
+                      {!streamStatus.isLive ? "غیرفعال (استریم قطع است)" : isMicMuted ? "بسته شده" : "درحال پخش"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Game/System Audio Control */}
+                <div className="flex items-center gap-2.5 bg-zinc-900/60 hover:bg-zinc-900/90 border border-zinc-850 px-3 py-2 rounded-xl transition-all w-full sm:w-auto">
+                  <button
+                    onClick={() => setIsGameMuted(!isGameMuted)}
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                      isGameMuted 
+                        ? "bg-red-950/60 text-red-500 border border-red-900/30" 
+                        : "bg-purple-950/30 text-purple-400 border border-purple-900/20"
+                    }`}
+                    title={isGameMuted ? "وصل کردن صدای بازی/سیستم" : "قطع صدای بازی/سیستم"}
+                  >
+                    {isGameMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  <div className="flex flex-col text-right">
+                    <span className="text-[10px] font-bold text-zinc-300">صدای داخل گیم و سیستم</span>
+                    <span className={`text-[9px] ${!streamStatus.isLive ? "text-zinc-500" : isGameMuted ? "text-red-500 font-medium" : "text-purple-400"}`}>
+                      {!streamStatus.isLive ? "غیرفعال (استریم قطع است)" : isGameMuted ? "بسته شده" : "درحال پخش"}
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+              
+              <div className="flex flex-col text-right md:max-w-xs select-none">
+                <span className="text-[11px] font-black text-red-400 flex items-center gap-1.5 justify-end">
+                  <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse" />
+                  <span>تفکیک صدای استریم (تنظیمات اختصاصی شما)</span>
+                </span>
+                <span className="text-[9px] text-zinc-500 mt-1 leading-relaxed">
+                  می‌توانید به طور مستقل صدای صحبت کردنِ خودِ شخص استریمر (میکروفون) یا صدای سیستم/بازی را قطع و وصل کنید!
+                </span>
+              </div>
+            </div>
+
+            {clipSuccessMessage && (
+              <div className="bg-emerald-950/40 border border-emerald-900/40 rounded-2xl p-3.5 flex items-start gap-2.5 text-right text-emerald-400" dir="rtl">
+                <Sparkles className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="text-[11px] font-black text-emerald-400">عملیات موفقیت‌آمیز</h4>
+                  <p className="text-[10px] text-zinc-300 mt-1 leading-relaxed">
+                    {clipSuccessMessage}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Acoustic Feedback Warning Notice */}
             <div className="bg-amber-950/20 border border-amber-900/30 rounded-2xl p-3.5 flex items-start gap-2.5 text-right" dir="rtl">
@@ -1519,11 +1896,17 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             </div>
 
             {/* Message window */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 max-h-[250px] lg:max-h-none relative">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[250px] lg:max-h-none relative custom-scrollbar bg-black/15">
               {koochakLoading ? (
-                <p className="text-[10px] text-zinc-600 text-center py-8">در حال بارگذاری چت...</p>
+                <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                  <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-[10px] text-zinc-500 font-medium">در حال بارگذاری گفتگو...</p>
+                </div>
               ) : koochakChat.length === 0 ? (
-                <p className="text-[10px] text-zinc-600 text-center py-8">پیامی هنوز فرستاده نشده است.</p>
+                <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
+                  <MessageCircle className="w-8 h-8 text-zinc-800" />
+                  <p className="text-[10px] text-zinc-600">هنوز گفتگویی شکل نگرفته است.</p>
+                </div>
               ) : (
                 koochakChat.map((msg) => {
                   const isMe = msg.username === currentUser.username;
@@ -1532,56 +1915,81 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                   
                   if (isSys) {
                     return (
-                      <div key={msg.id} className="bg-zinc-900/30 border border-zinc-900/60 p-2 rounded-xl text-center text-[9px] text-zinc-400">
-                        {msg.text}
+                      <div key={msg.id} className="flex justify-center my-1.5 select-none w-full">
+                        <span className="bg-[#121016]/80 backdrop-blur-md border border-zinc-900/50 rounded-full px-3 py-1 text-[9px] text-zinc-400 text-center shadow-inner">
+                          {msg.text}
+                        </span>
                       </div>
                     );
                   }
 
                   return (
-                    <div key={msg.id} className="text-right space-y-1 group/msg relative">
-                      <div className="flex items-center justify-between text-[9px]">
-                        <span className="text-zinc-600 font-mono">
-                          {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        
-                        <div className="flex items-center gap-1.5">
+                    <div key={msg.id} className={`flex items-start gap-2.5 max-w-[85%] relative group/msg ${isMe ? "mr-auto flex-row-reverse text-right" : "text-right"}`}>
+                      {/* Avatar */}
+                      {!isMe && (
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-zinc-900 to-zinc-850 border border-zinc-800 flex items-center justify-center text-[10px] font-black text-red-400 shrink-0 select-none shadow">
+                          {msg.username.substring(0, 1).toUpperCase()}
+                        </div>
+                      )}
+
+                      <div className={`flex flex-col ${isMe ? "items-end w-full" : "items-start"}`}>
+                        {/* Header metadata */}
+                        <div className="flex items-center gap-1.5 mb-0.5 select-none px-1">
+                          <span className={`text-[10px] font-bold ${isMe ? "text-red-400" : "text-zinc-400"}`}>
+                            {isMe ? "شما" : msg.username}
+                          </span>
+                          <span className="text-[8px] text-zinc-600 font-mono">
+                            {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {/* Reply block and body */}
+                        <div className="relative group/bubble">
+                          {/* Chat bubble itself */}
+                          <div className={`p-2.5 rounded-2xl shadow-sm text-[11px] leading-relaxed break-words relative ${
+                            isMe 
+                              ? "bg-gradient-to-br from-red-650 to-rose-650 text-white rounded-tr-none shadow-red-950/10 font-medium" 
+                              : "bg-zinc-900/90 border border-zinc-850 text-zinc-100 rounded-tl-none"
+                          }`}>
+                            
+                            {/* Nested Reply representation inside the bubble */}
+                            {msg.replyToText && (
+                              <div className={`border-r-2 pr-2 pl-1 py-1 rounded-lg text-[9px] mb-2 max-w-full truncate leading-normal ${
+                                isMe 
+                                  ? "bg-red-900/40 border-white text-white/90" 
+                                  : "bg-black/40 border-red-500 text-zinc-400"
+                              }`}>
+                                پاسخ به <strong className={isMe ? "text-red-200" : "text-red-400"}>{msg.replyToUser}</strong>: {msg.replyToText}
+                              </div>
+                            )}
+
+                            {/* Main payload */}
+                            {isGif ? (
+                              <div className="p-0.5 overflow-hidden rounded-lg">
+                                <img
+                                  src={msg.text}
+                                  alt="uploaded gif"
+                                  referrerPolicy="no-referrer"
+                                  className="rounded-lg max-w-[140px] max-h-[110px] object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <span>{msg.text}</span>
+                            )}
+                          </div>
+
+                          {/* Hover Reply trigger */}
                           <button
                             onClick={() => setKoochakReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
-                            className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-0.5 bg-zinc-900 hover:bg-zinc-800 text-red-400 hover:text-red-300 rounded-md text-[8px] flex items-center gap-0.5 cursor-pointer"
-                            title="پاسخ"
+                            className={`absolute -top-1.5 opacity-0 group-hover/msg:opacity-100 transition-all p-1 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-white cursor-pointer shadow-xl z-10 ${
+                              isMe ? "-right-6" : "-left-6"
+                            }`}
+                            title="پاسخ به این پیام"
                           >
-                            <CornerUpLeft className="w-2.5 h-2.5" />
-                            <span>پاسخ</span>
+                            <CornerUpLeft className="w-3 h-3" />
                           </button>
-                          <span className={`font-bold ${isMe ? "text-red-400" : "text-zinc-300"}`}>{msg.username}</span>
                         </div>
                       </div>
-
-                      {/* Reply Reference Panel */}
-                      {msg.replyToText && (
-                        <div className="bg-zinc-900/80 border-r border-red-500 pr-1.5 pl-1 py-0.5 rounded text-[8px] text-zinc-400 mb-0.5 leading-normal max-w-[90%] truncate mr-auto inline-block">
-                          پاسخ به <strong className="text-red-400">{msg.replyToUser}</strong>: {msg.replyToText}
-                        </div>
-                      )}
-
-                      {/* Message body (Image/GIF or Text) */}
-                      {isGif ? (
-                        <div className={`p-1 rounded-xl bg-zinc-900 border border-zinc-850 overflow-hidden shadow-md max-w-[90%] inline-block ${isMe ? "ml-auto block text-left" : ""}`}>
-                          <img
-                            src={msg.text}
-                            alt="uploaded gif"
-                            referrerPolicy="no-referrer"
-                            className="rounded-lg max-w-[150px] max-h-[120px] object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className={`p-2 rounded-xl text-xs break-words inline-block max-w-[90%] ${
-                          isMe ? "bg-red-950/20 text-red-100 border border-red-900/30 ml-auto block" : "bg-zinc-900 text-zinc-200"
-                        }`}>
-                          {msg.text}
-                        </div>
-                      )}
                     </div>
                   );
                 })

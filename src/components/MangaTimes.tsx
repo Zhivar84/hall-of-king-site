@@ -3,7 +3,7 @@ import { User, Post, Comment } from "../types";
 import { 
   ArrowLeft, Play, Send, Video, Image as ImageIcon, Plus, 
   Search, Sparkles, Heart, Trash2, Calendar, MessageCircle, RefreshCw,
-  UploadCloud, AlertCircle, X, Maximize
+  UploadCloud, AlertCircle, X, Maximize, Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -39,6 +39,174 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
   const [commentTexts, setCommentTexts] = useState<{ [postId: string]: string }>({});
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [fullscreenMedia, setFullscreenMedia] = useState<{ type: "video" | "photo" | "iframe"; url: string; title: string } | null>(null);
+
+  // --- EDITING POSTS STATE & UTILITY FUNCTIONS ---
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editTitle, setEditTitle] = useState<string>("");
+  const [editContent, setEditContent] = useState<string>("");
+  const [editMediaType, setEditMediaType] = useState<"video" | "photo">("video");
+  const [editMediaUrl, setEditMediaUrl] = useState<string>("");
+  const [editFilePreviewUrl, setEditFilePreviewUrl] = useState<string | null>(null);
+  const [editSelectedFile, setEditSelectedFile] = useState<File | null>(null);
+  const [uploadProgressEdit, setUploadProgressEdit] = useState<number | null>(null);
+  const [uploadErrorEdit, setUploadErrorEdit] = useState<string>("");
+  const [isUploadingEdit, setIsUploadingEdit] = useState<boolean>(false);
+  const [isDraggingEdit, setIsDraggingEdit] = useState<boolean>(false);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleEditClick = (post: Post) => {
+    setEditingPost(post);
+    setEditTitle(post.title);
+    setEditContent(post.content);
+    setEditMediaType(post.videoUrl ? "video" : "photo");
+    setEditMediaUrl(post.videoUrl || post.imageUrl || "");
+    setEditFilePreviewUrl(post.videoUrl || post.imageUrl || null);
+    setEditSelectedFile(null);
+    setUploadProgressEdit(null);
+    setUploadErrorEdit("");
+    setIsUploadingEdit(false);
+  };
+
+  const handleEditMediaTypeChange = (type: "video" | "photo") => {
+    setEditMediaType(type);
+    setEditSelectedFile(null);
+    setEditFilePreviewUrl(null);
+    setEditMediaUrl("");
+    setUploadErrorEdit("");
+    setUploadProgressEdit(null);
+    setIsUploadingEdit(false);
+    if (editFileInputRef.current) editFileInputRef.current.value = "";
+  };
+
+  const processEditFile = async (file: File) => {
+    if (!file) return;
+    setUploadErrorEdit("");
+
+    // Validate size (50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      setUploadErrorEdit("حداکثر حجم مجاز برای آپلود فایل ۵۰ مگابایت است.");
+      return;
+    }
+
+    // Validate type
+    if (editMediaType === "video" && !file.type.startsWith("video/")) {
+      setUploadErrorEdit("فرمت فایل نامعتبر است. لطفاً یک فایل ویدیویی انتخاب کنید.");
+      return;
+    }
+    if (editMediaType === "photo" && !file.type.startsWith("image/")) {
+      setUploadErrorEdit("فرمت فایل نامعتبر است. لطفاً یک فایل تصویری انتخاب کنید.");
+      return;
+    }
+
+    try {
+      setEditSelectedFile(file);
+      setIsUploadingEdit(true);
+      setUploadProgressEdit(10);
+
+      const previewUrl = URL.createObjectURL(file);
+      setEditFilePreviewUrl(previewUrl);
+
+      const reader = new FileReader();
+      
+      reader.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 50);
+          setUploadProgressEdit(10 + pct);
+        }
+      };
+
+      reader.onload = async () => {
+        try {
+          setUploadProgressEdit(70);
+          const base64Data = reader.result as string;
+          const payload = {
+            name: file.name,
+            fileData: base64Data
+          };
+
+          setUploadProgressEdit(85);
+          const res = await fetch("/api/upload-media", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            setEditMediaUrl(data.url);
+            setUploadProgressEdit(100);
+            setTimeout(() => {
+              setUploadProgressEdit(null);
+              setIsUploadingEdit(false);
+            }, 800);
+          } else {
+            const errData = await res.json();
+            setUploadErrorEdit(errData.error || "خطا در آپلود رسانه.");
+            setIsUploadingEdit(false);
+            setUploadProgressEdit(null);
+          }
+        } catch (innerErr) {
+          console.error(innerErr);
+          setUploadErrorEdit("خطا در پردازش اطلاعات فایل.");
+          setIsUploadingEdit(false);
+          setUploadProgressEdit(null);
+        }
+      };
+
+      reader.onerror = () => {
+        setUploadErrorEdit("خطا در خواندن فایل.");
+        setIsUploadingEdit(false);
+        setUploadProgressEdit(null);
+      };
+
+      reader.readAsDataURL(file);
+
+    } catch (err) {
+      console.error(err);
+      setUploadErrorEdit("خطا در آپلود.");
+      setIsUploadingEdit(false);
+      setUploadProgressEdit(null);
+    }
+  };
+
+  const handleUpdatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPost) return;
+    if (isUploadingEdit) {
+      setUploadErrorEdit("لطفاً تا اتمام آپلود فایل صبور باشید.");
+      return;
+    }
+    if (!editTitle.trim() || !editContent.trim()) return;
+
+    try {
+      const payload: any = {
+        title: editTitle.trim(),
+        content: editContent.trim(),
+      };
+
+      if (editMediaType === "video") {
+        payload.videoUrl = editMediaUrl.trim();
+        payload.imageUrl = "";
+      } else {
+        payload.imageUrl = editMediaUrl.trim();
+        payload.videoUrl = "";
+      }
+
+      const res = await fetch(`/api/posts/${editingPost.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const updatedPost = await res.json();
+        setPosts(prev => prev.map(p => p.id === editingPost.id ? updatedPost : p));
+        setEditingPost(null);
+      }
+    } catch (err) {
+      console.error("Error updating post:", err);
+    }
+  };
 
   // Load posts for "times"
   const loadPosts = async () => {
@@ -532,36 +700,46 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
                       {/* Avatar & actions */}
                       <div className="flex items-center justify-between gap-1 border-b border-zinc-900/60 pb-2">
                         
-                        {/* Delete action */}
+                        {/* Delete & Edit actions */}
                         {(post.author === currentUser.username || currentUser.role === "admin") && (
-                          deletingPostId === post.id ? (
-                            <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-rose-950/40 z-10">
-                              <span className="text-[8px] text-rose-400">حذف؟</span>
-                              <button
-                                onClick={() => {
-                                  handleDeletePost(post.id);
-                                  setDeletingPostId(null);
-                                }}
-                                className="bg-rose-950 text-rose-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-rose-900 cursor-pointer"
-                              >
-                                بله
-                              </button>
-                              <button
-                                onClick={() => setDeletingPostId(null)}
-                                className="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-zinc-700 cursor-pointer"
-                              >
-                                خیر
-                              </button>
-                            </div>
-                          ) : (
+                          <div className="flex items-center gap-1">
                             <button
-                              onClick={() => setDeletingPostId(post.id)}
-                              className="p-1 rounded-lg text-zinc-550 hover:text-rose-450 hover:bg-rose-950/20 transition-all cursor-pointer"
-                              title="حذف پست"
+                              onClick={() => handleEditClick(post)}
+                              className="p-1 rounded-lg text-zinc-550 hover:text-amber-400 hover:bg-amber-950/20 transition-all cursor-pointer"
+                              title="ویرایش پست"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Pencil className="w-3.5 h-3.5" />
                             </button>
-                          )
+                            
+                            {deletingPostId === post.id ? (
+                              <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded border border-rose-950/40 z-10">
+                                <span className="text-[8px] text-rose-400">حذف؟</span>
+                                <button
+                                  onClick={() => {
+                                    handleDeletePost(post.id);
+                                    setDeletingPostId(null);
+                                  }}
+                                  className="bg-rose-950 text-rose-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-rose-900 cursor-pointer"
+                                >
+                                  بله
+                                </button>
+                                <button
+                                  onClick={() => setDeletingPostId(null)}
+                                  className="bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded text-[8px] hover:bg-zinc-700 cursor-pointer"
+                                >
+                                  خیر
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeletingPostId(post.id)}
+                                className="p-1 rounded-lg text-zinc-550 hover:text-rose-450 hover:bg-rose-950/20 transition-all cursor-pointer"
+                                title="حذف پست"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         )}
 
                         <div className="flex items-center gap-2">
@@ -892,6 +1070,208 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
                   className="w-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all shadow-lg active:scale-[0.98] cursor-pointer"
                 >
                   ارسال و نمایش در تالار زمان
+                </button>
+
+              </form>
+
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Edit Post Modal */}
+        {editingPost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans text-right"
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="bg-zinc-950 border border-zinc-850 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
+            >
+              
+              <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                <button
+                  onClick={() => setEditingPost(null)}
+                  className="text-xs text-zinc-400 hover:text-white"
+                >
+                  انصراف
+                </button>
+                <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-bold">
+                  <Pencil className="w-4 h-4 text-amber-400" />
+                  <span>ویرایش پست تالار زمان</span>
+                </h3>
+              </div>
+
+              <form onSubmit={handleUpdatePost} className="space-y-4">
+                
+                <div>
+                  <label className="block text-zinc-400 text-xs font-medium mb-1.5 mr-1">عنوان پست</label>
+                  <input
+                    type="text"
+                    placeholder="عنوان ویدیو، تصویر یا تحلیل..."
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl py-2 px-3 text-white text-xs focus:outline-none focus:border-amber-600 text-right"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 text-xs font-medium mb-1.5 mr-1">نوع رسانه</label>
+                  <div className="grid grid-cols-2 gap-2 bg-zinc-900 p-1 rounded-xl border border-zinc-850">
+                    <button
+                      type="button"
+                      onClick={() => handleEditMediaTypeChange("video")}
+                      className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        editMediaType === "video" ? "bg-amber-600 text-white" : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      <span>ویدیو</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEditMediaTypeChange("photo")}
+                      className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        editMediaType === "photo" ? "bg-amber-600 text-white" : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>عکس / تصویر</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 text-xs font-medium mb-1.5 mr-1 text-right">
+                    {editMediaType === "video" ? "تغییر یا آپلود ویدیو" : "تغییر یا آپلود عکس"}
+                  </label>
+                  
+                  <input
+                    type="file"
+                    ref={editFileInputRef}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        processEditFile(e.target.files[0]);
+                      }
+                    }}
+                    accept={editMediaType === "video" ? "video/*" : "image/*"}
+                    className="hidden"
+                  />
+
+                  {/* Drag and Drop or Preview Zone */}
+                  {!editFilePreviewUrl ? (
+                    <div
+                      onClick={() => editFileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900/70`}
+                    >
+                      <UploadCloud className="w-10 h-10 text-zinc-500" />
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-white">
+                          {editMediaType === "video"
+                            ? "ویدیو خود را انتخاب کنید"
+                            : "عکس خود را انتخاب کنید"}
+                        </p>
+                        <p className="text-[10px] text-zinc-500">
+                          حداکثر حجم مجاز: ۵۰ مگابایت
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-3 relative overflow-hidden">
+                      <div className="relative aspect-video max-h-40 rounded-xl overflow-hidden bg-black border border-zinc-800/80 flex items-center justify-center">
+                        {editMediaType === "video" ? (
+                          <video src={editFilePreviewUrl} className="w-full h-full object-contain" controls />
+                        ) : (
+                          <img src={editFilePreviewUrl} alt="Preview" className="w-full h-full object-contain" />
+                        )}
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditSelectedFile(null);
+                            setEditFilePreviewUrl(null);
+                            setEditMediaUrl("");
+                            setUploadProgressEdit(null);
+                            setUploadErrorEdit("");
+                            setIsUploadingEdit(false);
+                            if (editFileInputRef.current) editFileInputRef.current.value = "";
+                          }}
+                          className="absolute top-2 right-2 p-1.5 rounded-full bg-black/75 hover:bg-black text-rose-400 hover:text-rose-300 transition-colors shadow-md cursor-pointer"
+                          title="حذف و انتخاب مجدد"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs border-t border-zinc-850 pt-2">
+                        <div className="text-left font-mono text-[10px] text-zinc-500 max-w-[60%] truncate" dir="ltr">
+                          {editSelectedFile ? `${editSelectedFile.name} (${formatBytes(editSelectedFile.size)})` : "فایل فعلی"}
+                        </div>
+                        <div className="text-right">
+                          {isUploadingEdit ? (
+                            <span className="text-amber-400 font-bold text-[10px] flex items-center gap-1">
+                              <span className="animate-pulse">در حال آپلود...</span>
+                            </span>
+                          ) : editMediaUrl ? (
+                            <span className="text-emerald-400 font-bold text-[10px]">✓ رسانه آماده است</span>
+                          ) : (
+                            <span className="text-rose-400 font-bold text-[10px]">خطا در آپلود</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {uploadProgressEdit !== null && (
+                        <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden border border-zinc-850">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${uploadProgressEdit}%` }}
+                            className="bg-amber-500 h-full"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {uploadErrorEdit && (
+                    <div className="mt-2 bg-rose-950/30 border border-rose-900/50 text-rose-300 text-[11px] py-2 px-3 rounded-xl flex items-center justify-between" dir="rtl">
+                      <span className="flex items-center gap-1.5">
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>{uploadErrorEdit}</span>
+                      </span>
+                      <button 
+                        type="button" 
+                        onClick={() => setUploadErrorEdit("")} 
+                        className="text-rose-400 hover:text-white font-bold px-1"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 text-xs font-medium mb-1.5 mr-1">توضیحات و تحلیل</label>
+                  <textarea
+                    placeholder="تحلیل کوتاه یا توضیح درباره فایل ارسالی..."
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    rows={3}
+                    className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl py-2 px-3 text-white text-xs focus:outline-none focus:border-amber-600 text-right"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUploadingEdit}
+                  className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-850 disabled:text-zinc-550 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all shadow-lg active:scale-[0.98] cursor-pointer"
+                >
+                  {isUploadingEdit ? "در حال آپلود رسانه..." : "ذخیره تغییرات"}
                 </button>
 
               </form>

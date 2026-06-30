@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { User, ChatMessage } from "../types";
 import { 
-  ArrowLeft, Send, Sparkles, Trash2, MessageSquare, Quote, AlertCircle, CornerUpLeft, Image, X, Smile
+  ArrowLeft, Send, Sparkles, Trash2, MessageSquare, Quote, AlertCircle, CornerUpLeft, Image, X, Smile, Users, Eye
 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -45,6 +45,47 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const lastMsgIdRef = useRef<string | null>(null);
+
+  // Synchronized viewer counts for Bozorg room
+  const [bozorgViewerCount, setBozorgViewerCount] = useState<number>(0);
+
+  useEffect(() => {
+    const clientId = (() => {
+      let id = sessionStorage.getItem("manga_client_id");
+      if (!id) {
+        id = "c_" + Math.random().toString(36).substring(2, 11);
+        sessionStorage.setItem("manga_client_id", id);
+      }
+      return id;
+    })();
+
+    const updatePresence = async () => {
+      try {
+        const res = await fetch("/api/presence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId,
+            username: currentUser.username,
+            hall: "bozorg"
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.viewers) {
+            setBozorgViewerCount(data.viewers.bozorg || 0);
+            localStorage.setItem("manga_live_viewers", JSON.stringify(data.viewers));
+          }
+        }
+      } catch (e) {
+        console.warn("Could not sync bozorg presence:", e);
+      }
+    };
+
+    updatePresence();
+    const interval = setInterval(updatePresence, 3500);
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   // Load all quotes and chat messages
   const loadData = async () => {
@@ -377,9 +418,10 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
               <MessageSquare className="w-4 h-4 text-purple-400" />
               <span>اتاق گفتگوی بزرگان</span>
             </h2>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-              <span className="text-[10px] text-zinc-500">زنده</span>
+            <div className="flex items-center gap-1.5 bg-purple-950/80 text-purple-400 border border-purple-900/40 px-3 py-1 rounded-full text-[10px] font-bold font-sans animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <Eye className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span>{bozorgViewerCount} بزرگ آنلاین</span>
             </div>
           </div>
 
@@ -391,77 +433,100 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
           <div className="flex-1 bg-black/40 border border-zinc-900/80 rounded-2xl flex flex-col overflow-hidden min-h-[300px]">
             
             {/* Messages container */}
-            <div className="flex-1 overflow-y-auto max-h-[380px] lg:max-h-[500px] p-4 space-y-4 relative">
+            <div className="flex-1 overflow-y-auto max-h-[380px] lg:max-h-[500px] p-4 space-y-4 relative custom-scrollbar bg-black/15">
               {loading ? (
-                <div className="text-center py-12 text-xs text-zinc-500">در حال دریافت پیام‌ها...</div>
+                <div className="flex flex-col items-center justify-center py-12 space-y-2">
+                  <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-[11px] text-zinc-500">در حال بارگذاری گفتگو...</p>
+                </div>
               ) : chat.length === 0 ? (
-                <div className="text-center py-16 text-xs text-zinc-500">هیچ پیامی در این تالار ارسال نشده است. اولین پیام را ارسال کنید!</div>
+                <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
+                  <MessageSquare className="w-8 h-8 text-zinc-850" />
+                  <p className="text-[11px] text-zinc-600">هنوز گفتگویی در تالار بزرگان صورت نگرفته است.</p>
+                </div>
               ) : (
                 chat.map((msg) => {
                   const isCurrentUser = msg.username === currentUser.username;
+                  const isSys = msg.username === "سیستم";
                   const isGif = msg.text.startsWith("http") || msg.text.startsWith("/uploads") || msg.text.includes(".gif");
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex flex-col group/msg ${isCurrentUser ? "items-start" : "items-end"}`}
-                    >
-                      {/* Message header */}
-                      <div className="flex items-center gap-1.5 mb-1 px-1">
-                        {!isCurrentUser && (
-                          <button
-                            onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
-                            className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 bg-zinc-900 hover:bg-zinc-800 text-purple-400 hover:text-purple-300 rounded-lg text-[9px] flex items-center gap-0.5 cursor-pointer"
-                            title="پاسخ"
-                          >
-                            <CornerUpLeft className="w-3 h-3" />
-                            <span>پاسخ</span>
-                          </button>
-                        )}
-                        <span className="text-[10px] font-black text-zinc-400">{msg.username}</span>
-                        <span className="text-[8px] text-zinc-600">
-                          {new Date(msg.createdAt).toLocaleTimeString("fa-IR", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        {isCurrentUser && (
-                          <button
-                            onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
-                            className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 bg-zinc-900 hover:bg-zinc-800 text-purple-400 hover:text-purple-300 rounded-lg text-[9px] flex items-center gap-0.5 cursor-pointer"
-                            title="پاسخ"
-                          >
-                            <span>پاسخ</span>
-                            <CornerUpLeft className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Reply Reference Panel */}
-                      {msg.replyToText && (
-                        <div className="bg-zinc-950/60 border-r-2 border-purple-500 pr-2 pl-1 py-1 rounded-md text-[9px] text-zinc-400 mb-1 leading-normal max-w-[80%] truncate">
-                          پاسخ به <strong className="text-purple-400">{msg.replyToUser}</strong>: {msg.replyToText}
-                        </div>
-                      )}
-
-                      {/* Message body (Image/GIF or Text) */}
-                      {isGif ? (
-                        <div className="p-1 rounded-2xl bg-zinc-900 border border-zinc-850 overflow-hidden shadow-lg hover:scale-[1.02] transition-transform duration-300">
-                          <img
-                            src={msg.text}
-                            alt="uploaded gif"
-                            referrerPolicy="no-referrer"
-                            className="rounded-xl max-w-[200px] max-h-[160px] object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className={`px-4 py-3 rounded-2xl text-xs leading-relaxed max-w-[85%] break-words ${
-                          isCurrentUser
-                            ? "bg-purple-600 text-white rounded-tl-none font-semibold shadow-lg shadow-purple-950/10"
-                            : "bg-zinc-900 text-zinc-100 rounded-tr-none border border-zinc-850"
-                        }`}>
+                  
+                  if (isSys) {
+                    return (
+                      <div key={msg.id} className="flex justify-center my-1.5 select-none w-full">
+                        <span className="bg-[#121016]/80 backdrop-blur-md border border-zinc-900/50 rounded-full px-3 py-1 text-[9px] text-zinc-400 text-center shadow-inner">
                           {msg.text}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={msg.id} className={`flex items-start gap-2.5 max-w-[85%] relative group/msg ${isCurrentUser ? "mr-auto flex-row-reverse text-right" : "text-right"}`}>
+                      {/* Avatar */}
+                      {!isCurrentUser && (
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-900 to-zinc-850 border border-zinc-800 flex items-center justify-center text-xs font-black text-purple-400 shrink-0 select-none shadow">
+                          {msg.username.substring(0, 1).toUpperCase()}
                         </div>
                       )}
+
+                      <div className={`flex flex-col ${isCurrentUser ? "items-end w-full" : "items-start"}`}>
+                        {/* Header metadata */}
+                        <div className="flex items-center gap-1.5 mb-0.5 select-none px-1">
+                          <span className={`text-[10px] font-bold ${isCurrentUser ? "text-purple-400" : "text-zinc-400"}`}>
+                            {isCurrentUser ? "شما" : msg.username}
+                          </span>
+                          <span className="text-[8px] text-zinc-600 font-mono">
+                            {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {/* Reply block and body */}
+                        <div className="relative group/bubble">
+                          {/* Chat bubble itself */}
+                          <div className={`p-2.5 rounded-2xl shadow-sm text-[11px] leading-relaxed break-words relative ${
+                            isCurrentUser 
+                              ? "bg-gradient-to-br from-purple-600 to-indigo-650 text-white rounded-tr-none shadow-purple-950/10 font-medium" 
+                              : "bg-zinc-900/90 border border-zinc-850 text-zinc-100 rounded-tl-none"
+                          }`}>
+                            
+                            {/* Nested Reply representation inside the bubble */}
+                            {msg.replyToText && (
+                              <div className={`border-r-2 pr-2 pl-1 py-1 rounded-lg text-[9px] mb-2 max-w-full truncate leading-normal ${
+                                isCurrentUser 
+                                  ? "bg-purple-900/40 border-white text-white/90" 
+                                  : "bg-black/40 border-purple-500 text-zinc-400"
+                              }`}>
+                                پاسخ به <strong className={isCurrentUser ? "text-purple-200" : "text-purple-400"}>{msg.replyToUser}</strong>: {msg.replyToText}
+                              </div>
+                            )}
+
+                            {/* Main payload */}
+                            {isGif ? (
+                              <div className="p-0.5 overflow-hidden rounded-lg">
+                                <img
+                                  src={msg.text}
+                                  alt="uploaded gif"
+                                  referrerPolicy="no-referrer"
+                                  className="rounded-lg max-w-[180px] max-h-[140px] object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <span>{msg.text}</span>
+                            )}
+                          </div>
+
+                          {/* Hover Reply trigger */}
+                          <button
+                            onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
+                            className={`absolute -top-1.5 opacity-0 group-hover/msg:opacity-100 transition-all p-1 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-white cursor-pointer shadow-xl z-10 ${
+                              isCurrentUser ? "-right-6" : "-left-6"
+                            }`}
+                            title="پاسخ به این پیام"
+                          >
+                            <CornerUpLeft className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   );
                 })

@@ -17,6 +17,54 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
 
+  // Live real-time viewer counts from backend presence
+  const [viewers, setViewers] = useState({
+    koochak1: 0,
+    koochak2: 0,
+    bozorg: 0,
+  });
+
+  useEffect(() => {
+    if (!user) return;
+
+    const clientId = (() => {
+      let id = sessionStorage.getItem("manga_client_id");
+      if (!id) {
+        id = "c_" + Math.random().toString(36).substring(2, 11);
+        sessionStorage.setItem("manga_client_id", id);
+      }
+      return id;
+    })();
+
+    const updatePresence = async () => {
+      try {
+        // When on main choice screen, user is in 'none' hall
+        const res = await fetch("/api/presence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId,
+            username: user.username,
+            hall: activeTab === "stream" ? "koochak_dynamic" : activeTab === "bozorgan" ? "bozorg" : "none" 
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.viewers) {
+            setViewers(data.viewers);
+            localStorage.setItem("manga_live_viewers", JSON.stringify(data.viewers));
+          }
+        }
+      } catch (e) {
+        console.warn("Could not sync presence:", e);
+      }
+    };
+
+    updatePresence();
+    const interval = setInterval(updatePresence, 3500);
+    return () => clearInterval(interval);
+  }, [user, activeTab]);
+
   // Load persistent user session from localStorage
   useEffect(() => {
     const savedUser = localStorage.getItem("manga_user");
@@ -167,7 +215,10 @@ export default function App() {
                     <span>ورود به تالار نمایش</span>
                     <span>←</span>
                   </span>
-                  <span className="text-[9px] bg-red-950/80 text-red-300 border border-red-850/40 px-2 py-0.5 rounded-full font-bold">پخش آنلاین صفحه</span>
+                  <div className="flex items-center gap-1.5 bg-red-950/60 text-red-300 border border-red-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                    <span>{viewers.koochak1 + viewers.koochak2} تماشاگر زنده</span>
+                  </div>
                 </div>
               </motion.div>
 
@@ -260,7 +311,10 @@ export default function App() {
                     <span>ورود به تالار بزرگان</span>
                     <span>←</span>
                   </span>
-                  <span className="text-[9px] bg-purple-950/80 text-purple-300 border border-purple-850/40 px-2 py-0.5 rounded-full font-bold">سخن بزرگان و چت</span>
+                  <div className="flex items-center gap-1.5 bg-purple-950/60 text-purple-300 border border-purple-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                    <span>{viewers.bozorg} فعال</span>
+                  </div>
                 </div>
               </motion.div>
 

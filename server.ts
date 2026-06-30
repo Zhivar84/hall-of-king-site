@@ -669,6 +669,32 @@ async function startServer() {
     }
   });
 
+  app.put("/api/posts/:id", async (req, res) => {
+    const { id } = req.params;
+    const { title, content, imageUrl, videoUrl } = req.body;
+    const db = await getDb();
+    const post = db.posts.find(p => p.id === id);
+    if (!post) {
+      return res.status(404).json({ error: "پست مورد نظر یافت نشد." });
+    }
+    if (title !== undefined) post.title = title;
+    if (content !== undefined) post.content = content;
+    if (imageUrl !== undefined) {
+      post.imageUrl = imageUrl;
+      if (imageUrl) {
+        delete post.videoUrl;
+      }
+    }
+    if (videoUrl !== undefined) {
+      post.videoUrl = videoUrl;
+      if (videoUrl) {
+        delete post.imageUrl;
+      }
+    }
+    await saveDb(db);
+    res.json(post);
+  });
+
   app.post("/api/posts/:id/view", async (req, res) => {
     const { id } = req.params;
     const db = await getDb();
@@ -905,6 +931,15 @@ async function startServer() {
     latestFrame2: string | null;
   }
 
+  interface InMemPresence {
+    clientId: string;
+    username: string;
+    hall: "koochak" | "koochak2" | "bozorg" | "none";
+    lastActive: number;
+  }
+
+  let activePresences: InMemPresence[] = [];
+
   const talarState: InMemTalarState = {
     bozorgParticipants: [],
     liveStream: {
@@ -937,6 +972,9 @@ async function startServer() {
     const now = Date.now();
     // Prune voice participants inactive for more than 10 seconds (tab closed / left page)
     talarState.bozorgParticipants = talarState.bozorgParticipants.filter(p => (now - p.lastActive) < 10000);
+
+    // Prune active presences inactive for more than 10 seconds (tab closed / left page)
+    activePresences = activePresences.filter(p => (now - p.lastActive) < 10000);
 
     // Prune live stream 1
     if (talarState.liveStream.isLive && (now - talarState.liveStream.lastFrameTime) > 45000) {
@@ -1156,6 +1194,44 @@ async function startServer() {
       talarState.liveStream2.audioChunks = talarState.liveStream2.audioChunks.slice(-8);
     }
     return res.json({ success: true });
+  });
+
+  // Global Presence Endpoint for real-time viewer tracking
+  app.post("/api/presence", (req, res) => {
+    const { clientId, username, hall } = req.body;
+    if (!clientId || !username) {
+      return res.status(400).json({ error: "شناسه کاربری الزامی است." });
+    }
+
+    pruneInactiveTalarState();
+
+    const idx = activePresences.findIndex(p => p.clientId === clientId);
+    if (idx !== -1) {
+      activePresences[idx].username = username;
+      activePresences[idx].hall = hall || 'none';
+      activePresences[idx].lastActive = Date.now();
+    } else {
+      activePresences.push({
+        clientId,
+        username,
+        hall: hall || 'none',
+        lastActive: Date.now()
+      });
+    }
+
+    // Return the count of active unique client tabs in each hall
+    const koochak1Count = activePresences.filter(p => p.hall === 'koochak').length;
+    const koochak2Count = activePresences.filter(p => p.hall === 'koochak2').length;
+    const bozorgCount = activePresences.filter(p => p.hall === 'bozorg').length;
+
+    res.json({
+      success: true,
+      viewers: {
+        koochak1: koochak1Count,
+        koochak2: koochak2Count,
+        bozorg: bozorgCount
+      }
+    });
   });
 
   // Talar Bozorg (Discord-like Voice/Video Hall) APIs
