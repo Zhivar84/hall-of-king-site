@@ -124,6 +124,17 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, []);
+
+  const [streamVolume, setStreamVolume] = useState<number>(0.8);
+  const [isStreamMuted, setIsStreamMuted] = useState<boolean>(false);
+
+  useEffect(() => {
+    const audioElements = document.querySelectorAll('[id^="livekit-audio-"]');
+    audioElements.forEach((el) => {
+      const audioElement = el as HTMLAudioElement;
+      audioElement.volume = isStreamMuted ? 0 : streamVolume;
+    });
+  }, [streamVolume, isStreamMuted]);
   
   // Custom video streaming controls
   const [streamQuality, setStreamQuality] = useState<'low' | 'medium' | 'high'>('medium');
@@ -234,6 +245,14 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               publishDefaults: {
                 simulcast: true,
                 dtx: true,
+                videoEncoding: {
+                  maxBitrate: 2500000, // 2.5 Mbps for HD 720p
+                  maxFramerate: 30,
+                },
+                screenShareEncoding: {
+                  maxBitrate: 3500000, // 3.5 Mbps for clear screen share
+                  maxFramerate: 30,
+                }
               }
             });
             livekitRoomRef.current = room;
@@ -244,6 +263,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               } else if (track.kind === "audio") {
                 const element = track.attach();
                 element.id = `livekit-audio-${participant.sid}-${track.sid}`;
+                element.volume = isStreamMuted ? 0 : streamVolume;
                 document.body.appendChild(element);
                 // Auto-play immediately on attachment to bypass browser constraints
                 element.play().catch(e => console.warn("Autoplay muted/blocked:", e));
@@ -350,16 +370,34 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         try {
           stream = await navigator.mediaDevices.getDisplayMedia({
             video: {
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
               frameRate: { ideal: 30, max: 60 }
             },
-            audio: true
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
           });
         } catch (e) {
           console.warn("Retrying with fallback simpler display constraints due to:", e);
           try {
-            stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: {
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 },
+                frameRate: { ideal: 30, max: 60 }
+              },
+              audio: true
+            });
           } catch (e2) {
-            throw e2;
+            console.warn("Retrying basic display constraints due to:", e2);
+            try {
+              stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            } catch (e3) {
+              throw e3;
+            }
           }
         }
       }
@@ -391,16 +429,34 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             name: streamSource === "webcam" ? "camera" : "screen_share",
           });
         }
-        if (audioTrack) {
-          // Force microphone track activation to bypass strict browser mute and autoplay policies
+        
+        if (streamSource === "screen") {
+          // Screen/Tab sharing: If a system/tab audio track is captured, publish it!
+          if (audioTrack) {
+            console.log("Publishing captured screen/tab audio track...");
+            await room.localParticipant.publishTrack(audioTrack, {
+              name: "screen_share_audio",
+            });
+          }
+          // Also enable microphone so the streamer can speak over the stream
           try {
             await room.localParticipant.setMicrophoneEnabled(true);
-            console.log("Forced microphone track activation via setMicrophoneEnabled");
+            console.log("Streamer microphone enabled alongside screen share");
           } catch (micErr) {
-            console.warn("setMicrophoneEnabled failed, publishing track manually:", micErr);
-            await room.localParticipant.publishTrack(audioTrack, {
-              name: "microphone",
-            });
+            console.warn("Could not enable streamer microphone:", micErr);
+          }
+        } else {
+          // Webcam streaming: publish the webcam microphone track
+          if (audioTrack) {
+            try {
+              await room.localParticipant.setMicrophoneEnabled(true);
+              console.log("Forced microphone track activation via setMicrophoneEnabled");
+            } catch (micErr) {
+              console.warn("setMicrophoneEnabled failed, publishing webcam audio track manually:", micErr);
+              await room.localParticipant.publishTrack(audioTrack, {
+                name: "microphone",
+              });
+            }
           }
         }
       }
@@ -499,6 +555,14 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 publishDefaults: {
                   simulcast: true,
                   dtx: true,
+                  videoEncoding: {
+                    maxBitrate: 2500000,
+                    maxFramerate: 30,
+                  },
+                  screenShareEncoding: {
+                    maxBitrate: 3500000,
+                    maxFramerate: 30,
+                  }
                 }
               });
               livekitRoomRef.current = room;
@@ -508,6 +572,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 } else if (track.kind === "audio") {
                   const element = track.attach();
                   element.id = `livekit-audio-${participant.sid}-${track.sid}`;
+                  element.volume = isStreamMuted ? 0 : streamVolume;
                   document.body.appendChild(element);
                   // Auto-play immediately on attachment to bypass browser constraints
                   element.play().catch(e => console.warn("Autoplay muted/blocked:", e));
@@ -1356,7 +1421,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             </div>
 
             {/* Stream Zoom / Resize Controls Options */}
-            <div className="bg-zinc-950/80 border border-zinc-900/60 rounded-2xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-right shadow-md" dir="rtl">
+            <div className="bg-zinc-950/80 border border-zinc-900/60 rounded-2xl p-3 flex flex-col xl:flex-row items-center justify-between gap-3 text-right shadow-md" dir="rtl">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={toggleFullscreen}
@@ -1381,10 +1446,55 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 >
                   <span>{isStreamZoomed ? "اندازه عادی نمایشگر" : "بزرگ‌کردن نمایشگر (داخل صفحه)"}</span>
                 </button>
+
+                {/* Sound Controls for Stream Audio */}
+                <div className="flex items-center gap-2 bg-zinc-900/60 px-3.5 py-1.5 rounded-xl border border-zinc-800">
+                  <button
+                    onClick={() => setIsStreamMuted(!isStreamMuted)}
+                    className="text-zinc-400 hover:text-white transition-all cursor-pointer p-0.5"
+                    title={isStreamMuted ? "وصل کردن صدا" : "قطع صدا"}
+                  >
+                    {isStreamMuted || streamVolume === 0 ? (
+                      <VolumeX className="w-4 h-4 text-red-500 animate-pulse" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-emerald-400" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={isStreamMuted ? 0 : streamVolume}
+                    onChange={(e) => {
+                      const vol = parseFloat(e.target.value);
+                      setStreamVolume(vol);
+                      if (vol > 0) {
+                        setIsStreamMuted(false);
+                      }
+                    }}
+                    className="w-16 sm:w-20 h-1 bg-zinc-850 rounded-lg appearance-none cursor-pointer accent-red-500"
+                    style={{ direction: "ltr" }}
+                  />
+                  <span className="text-[10px] text-zinc-400 font-mono w-7 text-center">
+                    {isStreamMuted ? "0%" : `${Math.round(streamVolume * 100)}%`}
+                  </span>
+                </div>
               </div>
               <div className="flex flex-col text-right">
-                <span className="text-[11px] font-black text-white">تغییر اندازه نمایشگر پخش زنده</span>
-                <span className="text-[9px] text-zinc-500 mt-0.5">برای مشاهده با جزئیات بیشتر، پخش زنده را تمام‌صفحه کنید یا اندازه آن را تغییر دهید</span>
+                <span className="text-[11px] font-black text-white">تغییر اندازه و کنترل صدای پخش زنده</span>
+                <span className="text-[9px] text-zinc-500 mt-0.5">برای مشاهده روان با جزئیات بیشتر صفحه را تغییر دهید یا صدا را تنظیم کنید</span>
+              </div>
+            </div>
+
+            {/* Acoustic Feedback Warning Notice */}
+            <div className="bg-amber-950/20 border border-amber-900/30 rounded-2xl p-3.5 flex items-start gap-2.5 text-right" dir="rtl">
+              <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-[11px] font-black text-amber-400">راهنما برای جلوگیری از صدای زوزه و سوت (Echo)</h4>
+                <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
+                  اگر به صورت همزمان هم استریم می‌کنید و هم خودتان یا اطرافیان پخش زنده را در تب دیگر یا دستگاه دیگری تماشا می‌کنید، برای جلوگیری از لوپ شدن صدا و ایجاد زوزه حتماً صدای تب تماشاچی را قطع (Mute) کرده یا از هدفون استفاده کنید.
+                </p>
               </div>
             </div>
 
