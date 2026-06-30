@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs/promises";
 import { createServer as createViteServer } from "vite";
 import compression from "compression";
+import { AccessToken } from "livekit-server-sdk";
 
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), "database.json");
@@ -424,6 +425,50 @@ async function startServer() {
     const db = await getDb();
     const filteredChat = db.chat.filter(c => c.type === type);
     res.json({ chat: filteredChat });
+  });
+
+  app.get("/api/livekit/config", (req, res) => {
+    res.json({
+      isConfigured: !!(process.env.LIVEKIT_URL && process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET),
+      url: process.env.LIVEKIT_URL || ""
+    });
+  });
+
+  app.get("/api/livekit/token", async (req, res) => {
+    const { room, identity, name } = req.query;
+    if (!room || !identity) {
+      return res.status(400).json({ error: "نام اتاق و شناسه کاربر الزامی است." });
+    }
+
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    const livekitUrl = process.env.LIVEKIT_URL;
+
+    if (!apiKey || !apiSecret) {
+      return res.status(503).json({
+        error: "سرویس LiveKit روی سرور تنظیم نشده است. لطفا متغیرهای محیطی LIVEKIT_API_KEY و LIVEKIT_API_SECRET را پیکربندی کنید."
+      });
+    }
+
+    try {
+      const at = new AccessToken(apiKey, apiSecret, {
+        identity: identity as string,
+        name: (name as string) || (identity as string),
+      });
+
+      at.addGrant({
+        roomJoin: true,
+        room: room as string,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishData: true,
+      });
+
+      const token = await at.toJwt();
+      res.json({ token, serverUrl: livekitUrl });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "خطا در تولید توکن لایوکیت" });
+    }
   });
 
   app.post("/api/chat", async (req, res) => {

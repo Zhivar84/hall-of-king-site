@@ -3,7 +3,7 @@ import { User, Post, Comment } from "../types";
 import { 
   ArrowLeft, Play, Send, Video, Image as ImageIcon, Plus, 
   Search, Sparkles, Heart, Trash2, Calendar, MessageCircle, RefreshCw,
-  UploadCloud, AlertCircle
+  UploadCloud, AlertCircle, X, Maximize
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -38,6 +38,7 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [commentTexts, setCommentTexts] = useState<{ [postId: string]: string }>({});
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [fullscreenMedia, setFullscreenMedia] = useState<{ type: "video" | "photo" | "iframe"; url: string; title: string } | null>(null);
 
   // Load posts for "times"
   const loadPosts = async () => {
@@ -332,10 +333,10 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
   });
 
   return (
-    <div className="min-h-screen bg-black text-[#f3f4f6] font-sans pb-16">
+    <div className="min-h-screen bg-black text-[#f3f4f6] font-sans pb-16 pt-8">
       
       {/* Top Bar */}
-      <div className="bg-zinc-950/85 backdrop-blur-xl border-b border-zinc-900/60 sticky top-0 z-40 px-4 py-4 md:px-8 shadow-md">
+      <div className="bg-zinc-950/85 backdrop-blur-xl border-b border-zinc-900/60 sticky top-8 z-40 px-4 py-4 md:px-8 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <button
             onClick={onBack}
@@ -457,7 +458,7 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
                 >
                   
                   {/* Media content */}
-                  <div className="bg-black relative overflow-hidden aspect-video">
+                  <div className="bg-black relative overflow-hidden aspect-video group">
                     {hasVideo && post.videoUrl ? (
                       post.videoUrl.includes("youtube.com") || post.videoUrl.includes("youtu.be") ? (
                         <iframe
@@ -478,12 +479,40 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
                         src={post.imageUrl} 
                         alt={post.title} 
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
+                        onClick={() => setFullscreenMedia({ type: "photo", url: post.imageUrl!, title: post.title })}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-650">
                         <Video className="w-12 h-12 text-amber-500" />
                       </div>
+                    )}
+
+                    {/* Expand overlay button */}
+                    {(hasImage || (hasVideo && post.videoUrl)) && (
+                      <button
+                        onClick={() => {
+                          if (hasVideo && post.videoUrl) {
+                            const isYoutube = post.videoUrl.includes("youtube.com") || post.videoUrl.includes("youtu.be");
+                            setFullscreenMedia({ 
+                              type: isYoutube ? "iframe" : "video", 
+                              url: post.videoUrl, 
+                              title: post.title 
+                            });
+                          } else if (hasImage && post.imageUrl) {
+                            setFullscreenMedia({ 
+                              type: "photo", 
+                              url: post.imageUrl, 
+                              title: post.title 
+                            });
+                          }
+                        }}
+                        className="absolute bottom-2.5 left-2.5 z-10 bg-black/75 hover:bg-black border border-zinc-800 text-zinc-300 hover:text-white p-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer text-[10px] shadow-lg hover:scale-105 active:scale-95"
+                        title="نمای بزرگ"
+                      >
+                        <Maximize className="w-3.5 h-3.5 text-amber-500" />
+                        <span>بزرگنمایی</span>
+                      </button>
                     )}
 
                     {/* Tag overlay */}
@@ -867,6 +896,74 @@ export default function MangaTimes({ currentUser, onBack }: MangaTimesProps) {
 
               </form>
 
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Fullscreen Media Modal */}
+        {fullscreenMedia && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-md p-4 sm:p-8"
+            onClick={() => setFullscreenMedia(null)}
+          >
+            {/* Top Close Button & Info */}
+            <div 
+              className="absolute top-4 left-4 right-4 flex items-center justify-between text-white select-none z-50"
+              dir="rtl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-sm sm:text-base font-bold text-zinc-100 font-sans tracking-tight">
+                {fullscreenMedia.title}
+              </h3>
+              <button
+                onClick={() => setFullscreenMedia(null)}
+                className="bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 p-2 rounded-full transition-all text-zinc-400 hover:text-white cursor-pointer shadow-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Media Content Box */}
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-5xl max-h-[80vh] flex items-center justify-center rounded-2xl overflow-hidden shadow-2xl bg-zinc-950/40 border border-zinc-900/50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {fullscreenMedia.type === "photo" && (
+                <img 
+                  src={fullscreenMedia.url} 
+                  alt={fullscreenMedia.title}
+                  referrerPolicy="no-referrer"
+                  className="max-w-full max-h-[80vh] object-contain rounded-2xl"
+                />
+              )}
+
+              {fullscreenMedia.type === "video" && (
+                <video 
+                  src={fullscreenMedia.url} 
+                  controls 
+                  autoPlay
+                  className="max-w-full max-h-[80vh] object-contain rounded-2xl"
+                  preload="auto"
+                />
+              )}
+
+              {fullscreenMedia.type === "iframe" && (
+                <div className="w-full aspect-video rounded-2xl overflow-hidden">
+                  <iframe
+                    src={getEmbedUrl(fullscreenMedia.url)}
+                    className="w-full h-full border-0"
+                    allowFullScreen
+                    allow="autoplay"
+                  ></iframe>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}
