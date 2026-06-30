@@ -146,21 +146,10 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   const handleQualityChange = async (quality: 'low' | 'medium' | 'high') => {
     setStreamQuality(quality);
     if (isLocalSharing) {
-      try {
-        await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            isLive: true,
-            streamer: currentUser.username,
-            title: streamTitleInput.trim() || (streamSource === "webcam" ? `پخش زنده وب‌کم ${currentUser.username}` : `پخش زنده صفحه نمایش ${currentUser.username}`),
-            streamType: streamSource,
-            quality: quality
-          })
-        });
-      } catch (err) {
-        console.warn("Could not update livestream quality on server:", err);
-      }
+      setStreamStatus(prev => ({
+        ...prev,
+        quality: quality
+      }));
     }
   };
 
@@ -195,11 +184,8 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   // Talar Koochak (YouTube style) loading & polling
   const loadKoochakData = async () => {
     try {
-      const streamRes = await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream");
-      if (streamRes.ok) {
-        const status = await streamRes.json();
-        setStreamStatus(status);
-      }
+      // Legacy livestream database polling completely disabled as per Refactor Instructions.
+      // We rely entirely on direct LiveKit WebRTC track subscription events for status tracking!
       
       const chatRes = await fetch(selectedHall === 'koochak2' ? "/api/chat?type=stream2" : "/api/chat?type=stream");
       if (chatRes.ok) {
@@ -207,7 +193,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         setKoochakChat(chatData.chat || []);
       }
     } catch (err) {
-      console.warn("Could not load stream status:", err);
+      console.warn("Could not load chat messages:", err);
     } finally {
       setKoochakLoading(false);
     }
@@ -260,6 +246,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
               if (track.kind === "video") {
                 setLivekitVideoTrack(track);
+                setStreamStatus({
+                  isLive: true,
+                  streamer: participant.identity || "ارائه‌دهنده",
+                  title: "پخش زنده تالار کوچک",
+                  quality: "medium"
+                });
               } else if (track.kind === "audio") {
                 const element = track.attach();
                 element.id = `livekit-audio-${participant.sid}-${track.sid}`;
@@ -273,6 +265,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
               if (track.kind === "video") {
                 setLivekitVideoTrack(null);
+                setStreamStatus({
+                  isLive: false,
+                  streamer: "",
+                  title: "",
+                  quality: undefined
+                });
               } else if (track.kind === "audio") {
                 const element = document.getElementById(`livekit-audio-${participant.sid}-${track.sid}`);
                 if (element) {
@@ -461,18 +459,13 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         }
       }
 
-      // Register live stream on server
-      await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          isLive: true,
-          streamer: currentUser.username,
-          title: titleToUse,
-          streamType: streamSource,
-          streamUrl: "",
-          quality: streamQuality
-        })
+      // Local stream status update instead of legacy database polling endpoint
+      setStreamStatus({
+        isLive: true,
+        streamer: currentUser.username,
+        title: titleToUse,
+        streamType: streamSource,
+        quality: streamQuality
       });
 
       // Send a system chat message to announce stream
@@ -569,6 +562,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
                 if (track.kind === "video") {
                   setLivekitVideoTrack(track);
+                  setStreamStatus({
+                    isLive: true,
+                    streamer: participant.identity || "ارائه‌دهنده",
+                    title: "پخش زنده تالار کوچک",
+                    quality: "medium"
+                  });
                 } else if (track.kind === "audio") {
                   const element = track.attach();
                   element.id = `livekit-audio-${participant.sid}-${track.sid}`;
@@ -581,6 +580,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
               room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
                 if (track.kind === "video") {
                   setLivekitVideoTrack(null);
+                  setStreamStatus({
+                    isLive: false,
+                    streamer: "",
+                    title: "",
+                    quality: undefined
+                  });
                 } else if (track.kind === "audio") {
                   const element = document.getElementById(`livekit-audio-${participant.sid}-${track.sid}`);
                   if (element) {
@@ -601,10 +606,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     }
 
     try {
-      await fetch(selectedHall === 'koochak2' ? "/api/livestream2" : "/api/livestream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isLive: false })
+      // Local stream status update instead of legacy database polling endpoint
+      setStreamStatus({
+        isLive: false,
+        streamer: "",
+        title: "",
+        quality: undefined
       });
 
       await fetch("/api/chat", {
