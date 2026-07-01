@@ -461,70 +461,74 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
                   }
 
                   return (
-                    <div key={msg.id} className={`flex items-start gap-2.5 max-w-[85%] relative group/msg ${isCurrentUser ? "mr-auto flex-row-reverse text-right" : "text-right"}`}>
-                      {/* Avatar */}
-                      {!isCurrentUser && (
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-900 to-zinc-850 border border-zinc-800 flex items-center justify-center text-xs font-black text-purple-400 shrink-0 select-none shadow">
+                    <div key={msg.id} className={`w-full flex ${isCurrentUser ? "justify-start" : "justify-end"}`}>
+                      <div className={`flex items-start gap-2.5 max-w-[85%] relative group/msg ${isCurrentUser ? "flex-row text-right" : "flex-row-reverse text-right"}`}>
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${
+                          isCurrentUser 
+                            ? "from-purple-900 to-indigo-950 border-purple-850 text-purple-300" 
+                            : "from-zinc-900 to-zinc-850 border-zinc-800 text-purple-400"
+                        } border flex items-center justify-center text-xs font-black shrink-0 select-none shadow`}>
                           {msg.username.substring(0, 1).toUpperCase()}
                         </div>
-                      )}
 
-                      <div className={`flex flex-col ${isCurrentUser ? "items-end w-full" : "items-start"}`}>
-                        {/* Header metadata */}
-                        <div className="flex items-center gap-1.5 mb-0.5 select-none px-1">
-                          <span className={`text-[10px] font-bold ${isCurrentUser ? "text-purple-400" : "text-zinc-400"}`}>
-                            {isCurrentUser ? "شما" : msg.username}
-                          </span>
-                          <span className="text-[8px] text-zinc-600 font-mono">
-                            {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-
-                        {/* Reply block and body */}
-                        <div className="relative group/bubble">
-                          {/* Chat bubble itself */}
-                          <div className={`p-2.5 rounded-2xl shadow-sm text-[11px] leading-relaxed break-words relative ${
-                            isCurrentUser 
-                              ? "bg-gradient-to-br from-purple-600 to-indigo-650 text-white rounded-tr-none shadow-purple-950/10 font-medium" 
-                              : "bg-zinc-900/90 border border-zinc-850 text-zinc-100 rounded-tl-none"
-                          }`}>
-                            
-                            {/* Nested Reply representation inside the bubble */}
-                            {msg.replyToText && (
-                              <div className={`border-r-2 pr-2 pl-1 py-1 rounded-lg text-[9px] mb-2 max-w-full truncate leading-normal ${
-                                isCurrentUser 
-                                  ? "bg-purple-900/40 border-white text-white/90" 
-                                  : "bg-black/40 border-purple-500 text-zinc-400"
-                              }`}>
-                                پاسخ به <strong className={isCurrentUser ? "text-purple-200" : "text-purple-400"}>{msg.replyToUser}</strong>: {msg.replyToText}
-                              </div>
-                            )}
-
-                            {/* Main payload */}
-                            {isGif ? (
-                              <div className="p-0.5 overflow-hidden rounded-lg">
-                                <img
-                                  src={msg.text}
-                                  alt="uploaded gif"
-                                  referrerPolicy="no-referrer"
-                                  className="rounded-lg max-w-[180px] max-h-[140px] object-cover"
-                                />
-                              </div>
-                            ) : (
-                              <span>{msg.text}</span>
-                            )}
+                        <div className={`flex flex-col ${isCurrentUser ? "items-start" : "items-end"}`}>
+                          {/* Header metadata */}
+                          <div className="flex items-center gap-1.5 mb-0.5 select-none px-1">
+                            <span className={`text-[10px] font-bold ${isCurrentUser ? "text-purple-400" : "text-zinc-400"}`}>
+                              {isCurrentUser ? "شما" : msg.username}
+                            </span>
+                            <span className="text-[8px] text-zinc-600 font-mono">
+                              {new Date(msg.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
 
-                          {/* Hover Reply trigger */}
-                          <button
-                            onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
-                            className={`absolute -top-1.5 opacity-0 group-hover/msg:opacity-100 transition-all p-1 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-white cursor-pointer shadow-xl z-10 ${
-                              isCurrentUser ? "-right-6" : "-left-6"
-                            }`}
-                            title="پاسخ به این پیام"
-                          >
-                            <CornerUpLeft className="w-3 h-3" />
-                          </button>
+                          {/* Reply block and body */}
+                          <div className="relative group/bubble">
+                            {/* Chat bubble itself */}
+                            <div className={`p-2.5 rounded-2xl shadow-sm text-[11px] leading-relaxed break-words relative ${
+                              isCurrentUser 
+                                ? "bg-gradient-to-br from-purple-600 to-indigo-650 text-white rounded-tr-none shadow-purple-950/10 font-medium" 
+                                : "bg-zinc-900/90 border border-zinc-850 text-zinc-100 rounded-tl-none"
+                            }`}>
+                              
+                              {/* Nested Reply representation inside the bubble */}
+                              {msg.replyToText && (
+                                <div className={`border-r-2 pr-2 pl-1 py-1 rounded-lg text-[9px] mb-2 max-w-full truncate leading-normal ${
+                                  isCurrentUser 
+                                    ? "bg-purple-900/40 border-white text-white/90" 
+                                    : "bg-black/40 border-purple-500 text-zinc-400"
+                                }`}>
+                                  پاسخ به <strong className={isCurrentUser ? "text-purple-200" : "text-purple-400"}>{msg.replyToUser}</strong>: {msg.replyToText}
+                                </div>
+                              )}
+
+                              {/* Main payload */}
+                              {isGif ? (
+                                <div className="p-0.5 overflow-hidden rounded-lg">
+                                  <img
+                                    src={msg.text}
+                                    alt="uploaded gif"
+                                    referrerPolicy="no-referrer"
+                                    className="rounded-lg max-w-[180px] max-h-[140px] object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <span>{msg.text}</span>
+                              )}
+                            </div>
+
+                            {/* Hover Reply trigger */}
+                            <button
+                              onClick={() => setReplyTo({ id: msg.id, username: msg.username, text: msg.text })}
+                              className={`absolute -top-1.5 opacity-0 group-hover/msg:opacity-100 transition-all p-1 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 hover:text-white cursor-pointer shadow-xl z-10 ${
+                                isCurrentUser ? "-left-6" : "-right-6"
+                              }`}
+                              title="پاسخ به این پیام"
+                            >
+                              <CornerUpLeft className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>

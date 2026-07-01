@@ -280,8 +280,8 @@ async function saveDb(db: Database): Promise<void> {
 async function startServer() {
   const app = express();
   app.use(compression());
-  app.use(express.json({ limit: "20mb" }));
-  app.use(express.urlencoded({ limit: "20mb", extended: true }));
+  app.use(express.json({ limit: "60mb" }));
+  app.use(express.urlencoded({ limit: "60mb", extended: true }));
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   // Ensure DB is initialized on boot
@@ -765,9 +765,9 @@ async function startServer() {
       return res.status(400).json({ error: "نام فایل و دیتای فایل الزامی است." });
     }
 
-    // Limit maximum media size to 10MB to protect 2GB RAM server
-    if (fileData.length > 14 * 1024 * 1024) {
-      return res.status(400).json({ error: "حجم فایل بیش از حد مجاز (حداکثر ۱۰ مگابایت) است." });
+    // Limit maximum media size to 45MB to protect 2GB RAM server
+    if (fileData.length > 60 * 1024 * 1024) {
+      return res.status(400).json({ error: "حجم فایل بیش از حد مجاز (حداکثر ۴۵ مگابایت) است." });
     }
 
     try {

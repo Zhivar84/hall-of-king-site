@@ -233,7 +233,11 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     const chunks: { blob: Blob; timestamp: number }[] = [];
     
     try {
-      const options = { mimeType: "video/webm;codecs=vp8,opus" };
+      const options: any = { 
+        mimeType: "video/webm;codecs=vp8,opus",
+        videoBitsPerSecond: 400000,
+        audioBitsPerSecond: 64000
+      };
       if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) {
         options.mimeType = "video/webm;codecs=vp9,opus";
       } else if (MediaRecorder.isTypeSupported("video/webm")) {
@@ -301,7 +305,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
     try {
       setIsSavingClip(true);
-      setClipSuccessMessage("در حال فشرده‌سازی و بارگذاری کلیپ ۲ دقیقه‌ای روی تالار زمان... لطفاً منتظر بمانید.");
+      setClipSuccessMessage("در حال آماده‌سازی و بارگذاری مستقیم کلیپ ۲ دقیقه‌ای روی تالار زمان... لطفاً منتظر بمانید.");
 
       const mimeType = validChunks[0].blob.type || "video/webm";
       const combinedBlob = new Blob(validChunks.map(c => c.blob), { type: mimeType });
