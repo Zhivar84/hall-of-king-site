@@ -8,6 +8,7 @@ import TalarFile from "./components/TalarFile";
 import TalarBozorgan from "./components/TalarBozorgan";
 import QuotesTicker from "./components/QuotesTicker";
 import ProfileModal from "./components/ProfileModal";
+import OnlineUsersModal from "./components/OnlineUsersModal";
 import { LogOut, ShieldAlert, Sparkles, Tv, BookOpen, User as UserIcon, Flame, FolderOpen, Users, MessageSquare, Quote } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -16,6 +17,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"choice" | "stream" | "times" | "file" | "bozorgan">("choice");
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [isOnlineUsersOpen, setIsOnlineUsersOpen] = useState<boolean>(false);
 
   // Live real-time viewer counts from backend presence
   const [viewers, setViewers] = useState({
@@ -134,36 +136,49 @@ export default function App() {
                 )}
               </div>
 
-              {/* User Welcome Greeting / Click to edit profile */}
-              <button
-                onClick={() => setIsProfileOpen(true)}
-                className="flex items-center gap-3 group text-right hover:bg-zinc-900/50 p-1.5 px-3 rounded-2xl border border-transparent hover:border-zinc-800/40 transition-all cursor-pointer select-none"
-                title="تنظیمات پروفایل کاربری"
-              >
-                <div className="text-right">
-                  <p className="text-[10px] text-zinc-500 group-hover:text-purple-400 transition-colors">سلام، خوش آمدید • ویرایش پروفایل</p>
-                  <h3 className="text-sm font-black text-white flex items-center gap-1">
-                    <span>{user.nickname || user.username}</span>
-                    {user.role === "admin" ? (
-                      <span className="text-[9px] bg-purple-950 text-purple-300 border border-purple-800/30 px-2 py-0.5 rounded font-bold mr-1">مدیر</span>
-                    ) : (
-                      <span className="text-[9px] bg-[#221f2d] text-gray-300 border border-[#343045] px-2 py-0.5 rounded mr-1">عضو</span>
-                    )}
-                  </h3>
-                </div>
-                {user.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.nickname || user.username}
-                    referrerPolicy="no-referrer"
-                    className="w-10 h-10 rounded-full object-cover border border-[#2d293d] shadow-md group-hover:border-purple-500/50 group-hover:scale-105 transition-all"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white border border-[#2d293d] shadow-md font-bold group-hover:border-purple-500/50 group-hover:scale-105 transition-all">
-                    {(user.nickname || user.username).charAt(0).toUpperCase()}
+              {/* Profile & Online Users Container */}
+              <div className="flex items-center gap-3">
+                {/* Online Users Button */}
+                <button
+                  onClick={() => setIsOnlineUsersOpen(true)}
+                  className="relative flex items-center justify-center w-10 h-10 rounded-full bg-[#120f18] hover:bg-zinc-900 border border-zinc-800/60 hover:border-purple-500/40 text-purple-400 hover:text-purple-300 shadow-md transition-all cursor-pointer group"
+                  title="افراد آنلاین در سایت"
+                >
+                  <Users className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-black rounded-full shadow-sm animate-pulse"></span>
+                </button>
+
+                {/* User Welcome Greeting / Click to edit profile */}
+                <button
+                  onClick={() => setIsProfileOpen(true)}
+                  className="flex items-center gap-3 group text-right hover:bg-zinc-900/50 p-1.5 px-3 rounded-2xl border border-transparent hover:border-zinc-800/40 transition-all cursor-pointer select-none"
+                  title="تنظیمات پروفایل کاربری"
+                >
+                  <div className="text-right">
+                    <p className="text-[10px] text-zinc-500 group-hover:text-purple-400 transition-colors">سلام، خوش آمدید • ویرایش پروفایل</p>
+                    <h3 className="text-sm font-black text-white flex items-center gap-1">
+                      <span>{user.nickname || user.username}</span>
+                      {user.role === "admin" ? (
+                        <span className="text-[9px] bg-purple-950 text-purple-300 border border-purple-800/30 px-2 py-0.5 rounded font-bold mr-1">مدیر</span>
+                      ) : (
+                        <span className="text-[9px] bg-[#221f2d] text-gray-300 border border-[#343045] px-2 py-0.5 rounded mr-1">عضو</span>
+                      )}
+                    </h3>
                   </div>
-                )}
-              </button>
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt={user.nickname || user.username}
+                      referrerPolicy="no-referrer"
+                      className="w-10 h-10 rounded-full object-cover border border-[#2d293d] shadow-md group-hover:border-purple-500/50 group-hover:scale-105 transition-all"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white border border-[#2d293d] shadow-md font-bold group-hover:border-purple-500/50 group-hover:scale-105 transition-all">
+                      {(user.nickname || user.username).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+              </div>
 
             </div>
           </header>
@@ -349,6 +364,16 @@ export default function App() {
                   setUser(updatedUser);
                   localStorage.setItem("manga_user", JSON.stringify(updatedUser));
                 }}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Online Users Modal Overlay */}
+          <AnimatePresence>
+            {isOnlineUsersOpen && (
+              <OnlineUsersModal
+                currentUser={user}
+                onClose={() => setIsOnlineUsersOpen(false)}
               />
             )}
           </AnimatePresence>

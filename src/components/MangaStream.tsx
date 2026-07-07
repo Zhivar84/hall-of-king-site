@@ -119,6 +119,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
   const [streamTitleInput, setStreamTitleInput] = useState<string>("");
   const [streamSource, setStreamSource] = useState<'screen' | 'webcam'>('screen');
   const [localStreamObject, setLocalStreamObject] = useState<MediaStream | null>(null);
+  const [isLocalMicMuted, setIsLocalMicMuted] = useState<boolean>(false);
   const [showGoLiveModal, setShowGoLiveModal] = useState<boolean>(false);
   const [koochakError, setKoochakError] = useState<string>("");
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
@@ -596,7 +597,25 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       }
     }
   }, [koochakChat, selectedHall]);
+  const toggleLocalMic = async () => {
+    if (!livekitRoomRef.current) return;
+    const nextMuted = !isLocalMicMuted;
+    try {
+      await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(!nextMuted);
+      setIsLocalMicMuted(nextMuted);
+    } catch (err) {
+      console.warn("Failed to toggle microphone via LiveKit, using manual fallback:", err);
+      if (koochakMediaStreamRef.current) {
+        koochakMediaStreamRef.current.getAudioTracks().forEach(track => {
+          track.enabled = !nextMuted;
+        });
+      }
+      setIsLocalMicMuted(nextMuted);
+    }
+  };
+
   const startKoochakStream = async () => {
+    setIsLocalMicMuted(false);
     setKoochakError("");
     const titleToUse = streamTitleInput.trim() || 
       (streamSource === "webcam" 
@@ -794,6 +813,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
       hiddenVideoRef.current = null;
     }
     setIsLocalSharing(false);
+    setIsLocalMicMuted(false);
 
     if (livekitConfig?.isConfigured) {
       if (livekitRoomRef.current) {
@@ -1507,6 +1527,19 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                       <Square className="w-4 h-4" />
                       <span>پایان پخش زنده</span>
                     </button>
+
+                    <button
+                      onClick={toggleLocalMic}
+                      className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg border ${
+                        isLocalMicMuted 
+                          ? "bg-red-950/80 hover:bg-red-900 text-red-400 border-red-900/40" 
+                          : "bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-400 border-emerald-900/40"
+                      }`}
+                      title={isLocalMicMuted ? "وصل کردن میکروفون" : "قطع کردن میکروفون"}
+                    >
+                      {isLocalMicMuted ? <MicOff className="w-4 h-4 text-red-400 animate-pulse" /> : <Mic className="w-4 h-4 text-emerald-400" />}
+                      <span>{isLocalMicMuted ? "میکروفون بسته" : "میکروفون باز"}</span>
+                    </button>
                     
                     {/* Live stream dynamic quality settings */}
                     <div className="flex items-center gap-1 bg-[#120f18] border border-zinc-900 p-1 rounded-xl">
@@ -1636,11 +1669,24 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                     className="w-full h-full object-contain max-h-[80vh] bg-black"
                   />
                   {/* Floating active stats for streamer */}
-                  <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none" dir="rtl">
+                  <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-10" dir="rtl">
                     <span className="bg-red-600/90 text-white text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow">
                       <Radio className="w-3 h-3 animate-pulse" />
                       <span>درحال استریم روی سرور ({streamQuality.toUpperCase()})</span>
                     </span>
+
+                    <button
+                      onClick={toggleLocalMic}
+                      className={`pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black transition-all shadow-lg border cursor-pointer ${
+                        isLocalMicMuted 
+                          ? "bg-red-600 hover:bg-red-500 border-red-500/30 text-white" 
+                          : "bg-zinc-950/95 hover:bg-zinc-900 border-zinc-800 text-emerald-400"
+                      }`}
+                      title={isLocalMicMuted ? "وصل کردن میکروفون" : "قطع کردن میکروفون"}
+                    >
+                      {isLocalMicMuted ? <MicOff className="w-3.5 h-3.5 text-white animate-pulse" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
+                      <span>{isLocalMicMuted ? "میکروفون: خاموش 🔇" : "میکروفون: روشن 🎙️"}</span>
+                    </button>
                   </div>
                 </div>
               ) : streamStatus.isLive && livekitVideoTrack ? (

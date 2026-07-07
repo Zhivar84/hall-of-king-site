@@ -1234,6 +1234,27 @@ async function startServer() {
     });
   });
 
+  // Get active online users list with full profiles
+  app.get("/api/presence/online", async (req, res) => {
+    pruneInactiveTalarState();
+    const uniqueUsernames = Array.from(new Set(activePresences.map(p => p.username.trim().toLowerCase())));
+    const db = await getDb();
+    
+    const onlineUsersList = uniqueUsernames.map(uname => {
+      const dbUser = db.users.find(u => u.username.trim().toLowerCase() === uname);
+      const presenceObj = activePresences.find(p => p.username.trim().toLowerCase() === uname);
+      return {
+        username: dbUser?.username || uname,
+        nickname: dbUser?.nickname || null,
+        avatarUrl: dbUser?.avatarUrl || null,
+        role: dbUser?.role || "user",
+        hall: presenceObj?.hall || "none"
+      };
+    });
+
+    res.json({ onlineUsers: onlineUsersList });
+  });
+
   // Talar Bozorg (Discord-like Voice/Video Hall) APIs
   app.get("/api/talar-bozorg/participants", (req, res) => {
     pruneInactiveTalarState();
