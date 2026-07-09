@@ -78,12 +78,6 @@ export default function TalarFile({ currentUser, onBack }: TalarFileProps) {
     if (!file) return;
     setErrorMessage("");
 
-    // 50MB file size limit
-    if (file.size > 50 * 1024 * 1024) {
-      setErrorMessage("حداکثر حجم مجاز برای آپلود فایل ۵۰ مگابایت است.");
-      return;
-    }
-
     try {
       setUploadProgress(10);
       const reader = new FileReader();
@@ -220,7 +214,7 @@ export default function TalarFile({ currentUser, onBack }: TalarFileProps) {
             <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2.5 py-1 rounded-full uppercase border border-emerald-500/30">اشتراک‌گذاری مستقیم فایل</span>
             <h2 className="text-xl font-black text-white">بایگانی و اشتراک‌گذاری فایل‌های گروه</h2>
             <p className="text-xs text-zinc-400 leading-relaxed max-w-xl">
-              هر نوع فایلی (عکس، ویدیو، جزوه، فشرده یا داکیومنت) را تا سقف ۵۰ مگابایت بارگذاری کنید تا بقیه دوستان بتوانند آن را با سرعت مستقیم دانلود کنند.
+              هر نوع فایلی (عکس، ویدیو، جزوه، فشرده یا داکیومنت) را بدون هیچ محدودیتی بارگذاری کنید تا بقیه دوستان بتوانند آن را با سرعت مستقیم دانلود کنند.
             </p>
           </div>
         </div>
@@ -257,7 +251,7 @@ export default function TalarFile({ currentUser, onBack }: TalarFileProps) {
                 <UploadCloud className={`w-10 h-10 transition-colors ${isDragging ? "text-emerald-400 animate-bounce" : "text-zinc-500"}`} />
                 <div className="text-center">
                   <p className="text-xs font-semibold text-zinc-300">انتخاب فایل یا رها کردن اینجا</p>
-                  <p className="text-[10px] text-zinc-500 mt-1">حداکثر حجم فایل ۵۰ مگابایت</p>
+                  <p className="text-[10px] text-zinc-500 mt-1">بدون هیچ محدودیتی در حجم فایل</p>
                 </div>
               </div>
 
