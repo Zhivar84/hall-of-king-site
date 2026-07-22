@@ -76,6 +76,9 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     bozorg: 0,
   });
 
+  const [hallViewersList, setHallViewersList] = useState<any[]>([]);
+  const [isViewersListExpanded, setIsViewersListExpanded] = useState<boolean>(true);
+
   useEffect(() => {
     const clientId = (() => {
       let id = sessionStorage.getItem("manga_client_id");
@@ -104,6 +107,20 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
             setViewers(data.viewers);
             localStorage.setItem("manga_live_viewers", JSON.stringify(data.viewers));
           }
+        }
+
+        // Fetch list of active usernames/nicknames inside this koochak/koochak2 hall
+        if (selectedHall === 'koochak' || selectedHall === 'koochak2') {
+          const onlineRes = await fetch("/api/presence/online");
+          if (onlineRes.ok) {
+            const onlineData = await onlineRes.json();
+            if (onlineData && onlineData.onlineUsers) {
+              const currentHallUsers = onlineData.onlineUsers.filter((u: any) => u.hall === selectedHall);
+              setHallViewersList(currentHallUsers);
+            }
+          }
+        } else {
+          setHallViewersList([]);
         }
       } catch (e) {
         console.warn("Could not sync stream presence:", e);
@@ -1943,6 +1960,65 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 <span>گفتگوی متنی تالار کوچک</span>
                 <MessageCircle className="w-4 h-4 text-red-500" />
               </h3>
+            </div>
+
+            {/* Live Viewers Collapsible Panel */}
+            <div className="bg-[#0e0c14] border-b border-zinc-900 p-3" dir="rtl">
+              <div 
+                onClick={() => setIsViewersListExpanded(!isViewersListExpanded)} 
+                className="flex items-center justify-between cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] sm:text-[11px] font-black text-zinc-300">تماشاگران زنده این تالار ({hallViewersList.length})</span>
+                </div>
+                <button className="text-[9px] text-purple-400 font-bold hover:text-purple-300 transition-colors">
+                  {isViewersListExpanded ? "بستن لیست ▲" : "مشاهده لیست ▼"}
+                </button>
+              </div>
+
+              {isViewersListExpanded && (
+                <div className="mt-2 max-h-[120px] overflow-y-auto custom-scrollbar space-y-1.5 pt-1.5 border-t border-zinc-900/60">
+                  {hallViewersList.length === 0 ? (
+                    <p className="text-[10px] text-zinc-600 text-center py-1">هیچ تماشاچی فعالی وجود ندارد</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {hallViewersList.map((viewer) => {
+                        const displayName = viewer.nickname || viewer.username;
+                        const isViewerMe = viewer.username === currentUser.username;
+                        return (
+                          <div 
+                            key={viewer.username} 
+                            className={`flex items-center gap-1.5 p-1 px-2 rounded-xl border text-[9px] sm:text-[10px] truncate ${
+                              isViewerMe 
+                                ? "bg-purple-950/20 border-purple-900/30 text-purple-300 font-bold" 
+                                : "bg-zinc-900/40 border-zinc-850/60 text-zinc-400"
+                            }`}
+                            title={`@${viewer.username}`}
+                          >
+                            {viewer.avatarUrl ? (
+                              <img 
+                                src={viewer.avatarUrl} 
+                                alt={displayName} 
+                                referrerPolicy="no-referrer"
+                                className="w-4 h-4 rounded-full object-cover border border-zinc-800"
+                              />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full bg-purple-700 text-white flex items-center justify-center font-bold text-[8px]">
+                                {displayName.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="truncate">{displayName}</span>
+                            {viewer.role === 'admin' && (
+                              <span className="text-[7px] bg-red-950 text-red-400 border border-red-900/20 px-1 rounded-md scale-90">مدیر</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Message window */}
