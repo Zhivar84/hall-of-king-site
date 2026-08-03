@@ -28,7 +28,7 @@ const PRESET_GIFS = [
 ];
 
 export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProps) {
-  const [subTab, setSubTab] = useState<"quotes" | "chat">("quotes");
+  const [subTab, setSubTab] = useState<"quotes" | "chat">("chat");
   const [quotes, setQuotes] = useState<QuoteType[]>([]);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState<string>("");
@@ -266,7 +266,11 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
   };
 
   return (
-    <div className="min-h-screen lg:h-[calc(100vh-32px)] bg-black text-[#f3f4f6] font-sans relative lg:overflow-hidden flex flex-col selection:bg-purple-600/30 pt-8 pb-4">
+    <div className={`bg-black text-[#f3f4f6] font-sans relative flex flex-col selection:bg-purple-600/30 pt-4 pb-4 ${
+      subTab === "chat" 
+        ? "h-screen overflow-hidden" 
+        : "min-h-screen lg:h-screen lg:overflow-hidden"
+    }`}>
       
       {/* Decorative Background Glows */}
       <div className="absolute top-[-25%] right-[-15%] w-[60vw] h-[60vw] rounded-full bg-purple-950/10 blur-[130px] animate-pulse pointer-events-none"></div>
@@ -334,7 +338,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-4 md:py-6 flex flex-col lg:overflow-hidden relative z-10" dir="rtl">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-4 md:py-6 flex flex-col overflow-hidden relative z-10" dir="rtl">
         <AnimatePresence mode="wait">
           {subTab === "quotes" ? (
             /* SUB-TAB A: SOKHAN BOZORGAN (Quotes manager & list) */
@@ -481,7 +485,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
               </div>
 
               {/* Chat Area Box */}
-              <div className="flex-1 bg-black/40 border border-zinc-900/80 rounded-2xl flex flex-col overflow-hidden min-h-[300px] mt-4 relative">
+              <div className="flex-1 bg-black/40 border border-zinc-900/80 rounded-2xl flex flex-col overflow-hidden min-h-0 mt-4 relative">
                 
                 {/* Messages Container */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/15">
