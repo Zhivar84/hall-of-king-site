@@ -45,6 +45,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
   const [uploadingGif, setUploadingGif] = useState<boolean>(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const lastMsgIdRef = useRef<string | null>(null);
 
   // Synchronized viewer counts for Bozorg room
@@ -120,16 +121,18 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
     return () => clearInterval(interval);
   }, []);
 
-  // Scroll to bottom of chat only when active and message arrives
+  // Scroll to bottom of chat only when active and message arrives (using dedicated container ref)
   useEffect(() => {
     if (subTab === "chat" && chat.length > 0) {
       const latestMsg = chat[chat.length - 1];
       if (latestMsg.id !== lastMsgIdRef.current) {
         lastMsgIdRef.current = latestMsg.id;
-        setTimeout(() => {
-          chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, 100);
       }
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }, 50);
     }
   }, [chat, subTab]);
 
@@ -488,7 +491,7 @@ export default function TalarBozorgan({ currentUser, onBack }: TalarBozorganProp
               <div className="flex-1 bg-black/40 border border-zinc-900/80 rounded-2xl flex flex-col overflow-hidden min-h-0 mt-4 relative">
                 
                 {/* Messages Container */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/15">
+                <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-black/15">
                   {loading ? (
                     <div className="flex flex-col items-center justify-center py-20 space-y-2">
                       <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>

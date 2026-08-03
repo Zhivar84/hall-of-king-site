@@ -38,6 +38,7 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const playedAudioChunksRef = useRef<Set<string>>(new Set());
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Join the Talar on mount
   useEffect(() => {
@@ -163,10 +164,14 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
     };
   }, [currentUser, isMutedAll]);
 
-  // Scroll to bottom of chat
+  // Scroll to bottom of chat safely via container ref
   useEffect(() => {
     if (chatMessages.length > 0) {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }, 50);
     }
   }, [chatMessages]);
 
@@ -632,7 +637,7 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
             </div>
 
             {/* Messages box */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[300px] lg:max-h-none relative custom-scrollbar bg-black/15">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[300px] lg:max-h-none relative custom-scrollbar bg-black/15">
               {chatMessages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
                   <MessageSquare className="w-8 h-8 text-zinc-800" />
