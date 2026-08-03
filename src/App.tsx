@@ -186,7 +186,7 @@ export default function App() {
           </header>
 
           {/* Main Choice Hub */}
-          <main className="flex-1 max-w-5xl w-full mx-auto px-6 py-12 md:py-16 relative z-10 flex flex-col justify-center items-center">
+          <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-12 md:py-16 relative z-10 flex flex-col justify-center items-center">
             
             {/* Title greeting banner */}
             <div className="text-center space-y-3 mb-12">
@@ -203,13 +203,13 @@ export default function App() {
             </div>
 
             {/* Responsive grid with 5 choice triggers */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 w-full">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 xl:gap-4 w-full">
               
               {/* TALAR NAMAYESH BUTTON */}
               <motion.div
                 whileHover={{ y: -5, scale: 1.01 }}
                 onClick={() => setActiveTab("stream")}
-                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-72 cursor-pointer overflow-hidden text-right"
+                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-5 md:p-6 shadow-xl flex flex-col justify-between h-[320px] cursor-pointer overflow-hidden text-right"
               >
                 {/* Background Light Accent */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/5 rounded-full blur-3xl group-hover:bg-red-600/10 transition-all"></div>
@@ -227,14 +227,14 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60 relative z-10">
-                  <span className="text-xs font-bold text-red-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-900/60 relative z-10 w-full">
+                  <span className="text-xs font-bold text-red-400 group-hover:-translate-x-1 transition-transform flex items-center gap-1" dir="rtl">
                     <span>ورود به تالار نمایش</span>
-                    <span>←</span>
+                    <span className="text-sm">←</span>
                   </span>
-                  <div className="flex items-center gap-1.5 bg-red-950/60 text-red-300 border border-red-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                    <span>{viewers.koochak1 + viewers.koochak2} تماشاگر زنده</span>
+                  <div className="flex items-center gap-1 bg-red-950/60 text-red-300 border border-red-900/30 px-1.5 py-0.5 rounded-full font-bold text-[9px] shrink-0">
+                    <span className="w-1 h-1 rounded-full bg-red-500 animate-pulse"></span>
+                    <span>{viewers.koochak1 + viewers.koochak2} زنده</span>
                   </div>
                 </div>
               </motion.div>
@@ -243,7 +243,7 @@ export default function App() {
               <motion.div
                 whileHover={{ y: -5, scale: 1.01 }}
                 onClick={() => setActiveTab("times")}
-                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-72 cursor-pointer overflow-hidden text-right"
+                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-5 md:p-6 shadow-xl flex flex-col justify-between h-[320px] cursor-pointer overflow-hidden text-right"
               >
                 {/* Background Light Accent */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-amber-600/5 rounded-full blur-3xl group-hover:bg-amber-600/10 transition-all"></div>
@@ -261,12 +261,12 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60 relative z-10">
-                  <span className="text-xs font-bold text-amber-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-900/60 relative z-10 w-full">
+                  <span className="text-xs font-bold text-amber-400 group-hover:-translate-x-1 transition-transform flex items-center gap-1" dir="rtl">
                     <span>ورود به تالار زمان</span>
-                    <span>←</span>
+                    <span className="text-sm">←</span>
                   </span>
-                  <span className="text-[9px] bg-amber-950/80 text-amber-300 border border-amber-850/40 px-2 py-0.5 rounded-full font-bold">ویدیوها و تصاویر</span>
+                  <span className="text-[9px] bg-amber-950/80 text-amber-300 border border-amber-850/40 px-1.5 py-0.5 rounded-full font-bold shrink-0">گالری</span>
                 </div>
               </motion.div>
 
@@ -274,7 +274,7 @@ export default function App() {
               <motion.div
                 whileHover={{ y: -5, scale: 1.01 }}
                 onClick={() => setActiveTab("file")}
-                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-72 cursor-pointer overflow-hidden text-right"
+                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-5 md:p-6 shadow-xl flex flex-col justify-between h-[320px] cursor-pointer overflow-hidden text-right"
               >
                 {/* Background Light Accent */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-600/5 rounded-full blur-3xl group-hover:bg-emerald-600/10 transition-all"></div>
@@ -292,12 +292,12 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60 relative z-10">
-                  <span className="text-xs font-bold text-emerald-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-900/60 relative z-10 w-full">
+                  <span className="text-xs font-bold text-emerald-400 group-hover:-translate-x-1 transition-transform flex items-center gap-1" dir="rtl">
                     <span>ورود به تالار فایل</span>
-                    <span>←</span>
+                    <span className="text-sm">←</span>
                   </span>
-                  <span className="text-[9px] bg-emerald-950/80 text-emerald-300 border border-emerald-850/40 px-2 py-0.5 rounded-full font-bold">بایگانی گروهی</span>
+                  <span className="text-[9px] bg-emerald-950/80 text-emerald-300 border border-emerald-850/40 px-1.5 py-0.5 rounded-full font-bold shrink-0">بایگانی</span>
                 </div>
               </motion.div>
 
@@ -305,7 +305,7 @@ export default function App() {
               <motion.div
                 whileHover={{ y: -5, scale: 1.01 }}
                 onClick={() => setActiveTab("bozorgan")}
-                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-72 cursor-pointer overflow-hidden text-right"
+                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-5 md:p-6 shadow-xl flex flex-col justify-between h-[320px] cursor-pointer overflow-hidden text-right"
               >
                 {/* Background Light Accent */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/5 rounded-full blur-3xl group-hover:bg-purple-600/10 transition-all"></div>
@@ -323,14 +323,14 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60 relative z-10">
-                  <span className="text-xs font-bold text-purple-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-900/60 relative z-10 w-full">
+                  <span className="text-xs font-bold text-purple-400 group-hover:-translate-x-1 transition-transform flex items-center gap-1" dir="rtl">
                     <span>ورود به تالار بزرگان</span>
-                    <span>←</span>
+                    <span className="text-sm">←</span>
                   </span>
-                  <div className="flex items-center gap-1.5 bg-purple-950/60 text-purple-300 border border-purple-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                    <span>{viewers.bozorg} فعال</span>
+                  <div className="flex items-center gap-1 bg-purple-950/60 text-purple-300 border border-purple-900/30 px-1.5 py-0.5 rounded-full font-bold text-[9px] shrink-0">
+                    <span className="w-1 h-1 rounded-full bg-purple-500 animate-pulse"></span>
+                    <span>{viewers.bozorg} آنلاین</span>
                   </div>
                 </div>
               </motion.div>
@@ -339,7 +339,7 @@ export default function App() {
               <motion.div
                 whileHover={{ y: -5, scale: 1.01 }}
                 onClick={() => setActiveTab("sokhan")}
-                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-72 cursor-pointer overflow-hidden text-right"
+                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-5 md:p-6 shadow-xl flex flex-col justify-between h-[320px] cursor-pointer overflow-hidden text-right"
               >
                 {/* Background Light Accent */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-sky-600/5 rounded-full blur-3xl group-hover:bg-sky-600/10 transition-all"></div>
@@ -357,14 +357,14 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60 relative z-10">
-                  <span className="text-xs font-bold text-sky-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-900/60 relative z-10 w-full">
+                  <span className="text-xs font-bold text-sky-400 group-hover:-translate-x-1 transition-transform flex items-center gap-1" dir="rtl">
                     <span>ورود به تالار سخن</span>
-                    <span>←</span>
+                    <span className="text-sm">←</span>
                   </span>
-                  <div className="flex items-center gap-1.5 bg-sky-950/60 text-sky-300 border border-sky-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
-                    <span>اتاق سخن صوتی</span>
+                  <div className="flex items-center gap-1.5 bg-sky-950/60 text-sky-300 border border-sky-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>
+                    <span>صوتی</span>
                   </div>
                 </div>
               </motion.div>
