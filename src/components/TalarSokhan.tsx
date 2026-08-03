@@ -31,6 +31,7 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
   const localWebcamStreamRef = useRef<MediaStream | null>(null);
   const localVideoElementRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const isMicActiveRef = useRef<boolean>(false);
 
   // Polling / Upload intervals
   const webcamIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -64,6 +65,7 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
 
     // Leave on unmount
     return () => {
+      isMicActiveRef.current = false;
       fetch("/api/talar-bozorg/leave", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,8 +114,8 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch participants (includes frames & audio chunks)
-        const res = await fetch("/api/talar-bozorg/participants");
+        // Fetch participants (includes frames & audio chunks) - send username so we are never incorrectly pruned
+        const res = await fetch(`/api/talar-bozorg/participants?username=${encodeURIComponent(currentUser.username)}`);
         if (res.ok) {
           const data = await res.json();
           const list: TalarBozorgParticipant[] = data.participants || [];
@@ -168,20 +170,84 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
     }
   }, [chatMessages]);
 
+  // Sequential recording of 1.5-second standalone playable chunks (resolves missing media headers issue)
+  const recordNextChunk = (stream: MediaStream, options: any) => {
+    if (!isMicActiveRef.current || !localMicStreamRef.current || !localMicStreamRef.current.active) return;
+
+    try {
+      const recorder = new MediaRecorder(stream, options);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        if (chunks.length > 0 && isMicActiveRef.current) {
+          const blob = new Blob(chunks, { type: chunks[0].type || "audio/webm" });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64Data = (reader.result as string).split(",")[1];
+            if (base64Data && isMicActiveRef.current) {
+              fetch("/api/talar-bozorg/upload-audio", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  username: currentUser.username,
+                  chunk: {
+                    id: "s_" + Math.random().toString(36).substring(2, 11),
+                    data: base64Data,
+                    timestamp: Date.now()
+                  }
+                })
+              }).catch(err => console.warn("Failed uploading audio chunk:", err));
+            }
+          };
+          reader.readAsDataURL(blob);
+        }
+
+        // Start next recording chunk immediately if microphone is still active
+        if (isMicActiveRef.current && localMicStreamRef.current && localMicStreamRef.current.active) {
+          recordNextChunk(localMicStreamRef.current, options);
+        }
+      };
+
+      recorder.start();
+
+      // Stop recorder after 1500ms to produce a self-contained, fully playable audio file
+      setTimeout(() => {
+        if (recorder.state === "recording" && isMicActiveRef.current) {
+          try {
+            recorder.stop();
+          } catch (e) {
+            console.debug("Recorder stop issue:", e);
+          }
+        }
+      }, 1500);
+
+    } catch (err) {
+      console.warn("Error in recordNextChunk:", err);
+      // Fallback: retry in 1s
+      setTimeout(() => {
+        if (isMicActiveRef.current && localMicStreamRef.current) {
+          recordNextChunk(localMicStreamRef.current, options);
+        }
+      }, 1000);
+    }
+  };
+
   // Handle microphone toggle
   const toggleMicrophone = async () => {
     if (isMicActive) {
       // Turn off mic
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch (e) {}
-      }
+      isMicActiveRef.current = false;
+      setIsMicActive(false);
       if (localMicStreamRef.current) {
         localMicStreamRef.current.getTracks().forEach(track => track.stop());
         localMicStreamRef.current = null;
       }
-      setIsMicActive(false);
       updateServerStatus(false, isWebcamActive);
     } else {
       // Turn on mic
@@ -194,6 +260,7 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
           }
         });
         localMicStreamRef.current = stream;
+        isMicActiveRef.current = true;
         setIsMicActive(true);
         updateServerStatus(true, isWebcamActive);
 
@@ -211,40 +278,13 @@ export default function TalarSokhan({ currentUser, onBack }: TalarSokhanProps) {
           console.warn("MimeType check not supported/failed:", e);
         }
 
-        // Start media recorder in slices to upload audio chunks
-        const recorder = new MediaRecorder(stream, options);
-        mediaRecorderRef.current = recorder;
-
-        recorder.ondataavailable = async (e) => {
-          if (e.data && e.data.size > 0) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              const base64Data = (reader.result as string).split(",")[1];
-              if (base64Data) {
-                fetch("/api/talar-bozorg/upload-audio", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    username: currentUser.username,
-                    chunk: {
-                      id: "s_" + Math.random().toString(36).substring(2, 11),
-                      data: base64Data,
-                      timestamp: Date.now()
-                    }
-                  })
-                }).catch(err => console.warn("Failed uploading audio chunk:", err));
-              }
-            };
-            reader.readAsDataURL(e.data);
-          }
-        };
-
-        // Record in 800ms slices for optimal real-time speech relay
-        recorder.start(800);
+        // Begin the standalone playable chunks cycle
+        recordNextChunk(stream, options);
 
       } catch (err: any) {
         console.error("Mic access failed:", err);
         alert("دسترسی به میکروفون برقرار نشد. لطفاً مجوز مربوطه را بررسی کنید.");
+        isMicActiveRef.current = false;
         setIsMicActive(false);
         updateServerStatus(false, isWebcamActive);
       }

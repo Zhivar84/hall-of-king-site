@@ -1252,6 +1252,24 @@ async function startServer() {
 
   // Talar Bozorg (Discord-like Voice/Video Hall) APIs
   app.get("/api/talar-bozorg/participants", (req, res) => {
+    const { username } = req.query;
+    if (username && typeof username === "string") {
+      const cleanUsername = username.trim();
+      const idx = talarState.bozorgParticipants.findIndex(p => p.username.trim().toLowerCase() === cleanUsername.toLowerCase());
+      if (idx !== -1) {
+        talarState.bozorgParticipants[idx].lastActive = Date.now();
+      } else {
+        // Auto-rejoin if they polled but were pruned
+        talarState.bozorgParticipants.push({
+          username: cleanUsername,
+          micActive: false,
+          webcamActive: false,
+          screenActive: false,
+          joinedAt: new Date().toISOString(),
+          lastActive: Date.now()
+        });
+      }
+    }
     pruneInactiveTalarState();
     res.json({ participants: talarState.bozorgParticipants });
   });
@@ -1324,18 +1342,28 @@ async function startServer() {
     if (!username) {
       return res.status(400).json({ error: "نام کاربری الزامی است." });
     }
-    const idx = talarState.bozorgParticipants.findIndex(p => p.username === username);
-    if (idx !== -1) {
-      if (webcamFrame !== undefined) {
-        talarState.bozorgParticipants[idx].webcamFrame = webcamFrame;
-      }
-      if (screenFrame !== undefined) {
-        talarState.bozorgParticipants[idx].screenFrame = screenFrame;
-      }
-      talarState.bozorgParticipants[idx].lastActive = Date.now();
-      return res.json({ success: true });
+    let idx = talarState.bozorgParticipants.findIndex(p => p.username === username);
+    if (idx === -1) {
+      // Auto-rejoin if missing
+      talarState.bozorgParticipants.push({
+        username,
+        micActive: false,
+        webcamActive: true,
+        screenActive: false,
+        joinedAt: new Date().toISOString(),
+        lastActive: Date.now()
+      });
+      idx = talarState.bozorgParticipants.length - 1;
     }
-    res.status(404).json({ error: "کاربر یافت نشد." });
+    
+    if (webcamFrame !== undefined) {
+      talarState.bozorgParticipants[idx].webcamFrame = webcamFrame;
+    }
+    if (screenFrame !== undefined) {
+      talarState.bozorgParticipants[idx].screenFrame = screenFrame;
+    }
+    talarState.bozorgParticipants[idx].lastActive = Date.now();
+    return res.json({ success: true });
   });
 
   app.post("/api/talar-bozorg/upload-audio", (req, res) => {
@@ -1343,22 +1371,32 @@ async function startServer() {
     if (!username || !chunk || !chunk.id || !chunk.data) {
       return res.status(400).json({ error: "اطلاعات صوتی نامعتبر است." });
     }
-    const idx = talarState.bozorgParticipants.findIndex(p => p.username === username);
-    if (idx !== -1) {
-      if (!talarState.bozorgParticipants[idx].audioChunks) {
-        talarState.bozorgParticipants[idx].audioChunks = [];
-      }
-      talarState.bozorgParticipants[idx].audioChunks!.push(chunk);
-      
-      // Retain only the last 5 audio chunks to avoid memory build-up and latency
-      if (talarState.bozorgParticipants[idx].audioChunks!.length > 5) {
-        talarState.bozorgParticipants[idx].audioChunks = talarState.bozorgParticipants[idx].audioChunks!.slice(-5);
-      }
-      
-      talarState.bozorgParticipants[idx].lastActive = Date.now();
-      return res.json({ success: true });
+    let idx = talarState.bozorgParticipants.findIndex(p => p.username === username);
+    if (idx === -1) {
+      // Auto-rejoin if missing
+      talarState.bozorgParticipants.push({
+        username,
+        micActive: true,
+        webcamActive: false,
+        screenActive: false,
+        joinedAt: new Date().toISOString(),
+        lastActive: Date.now()
+      });
+      idx = talarState.bozorgParticipants.length - 1;
     }
-    res.status(404).json({ error: "کاربر یافت نشد." });
+    
+    if (!talarState.bozorgParticipants[idx].audioChunks) {
+      talarState.bozorgParticipants[idx].audioChunks = [];
+    }
+    talarState.bozorgParticipants[idx].audioChunks!.push(chunk);
+    
+    // Retain only the last 5 audio chunks to avoid memory build-up and latency
+    if (talarState.bozorgParticipants[idx].audioChunks!.length > 5) {
+      talarState.bozorgParticipants[idx].audioChunks = talarState.bozorgParticipants[idx].audioChunks!.slice(-5);
+    }
+    
+    talarState.bozorgParticipants[idx].lastActive = Date.now();
+    return res.json({ success: true });
   });
 
 
