@@ -7,7 +7,7 @@ import {
   Trash2, CornerUpLeft, Image as ImageIcon, X, Smile
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Room, RoomEvent, VideoPresets, Track } from "livekit-client";
+import { Room, RoomEvent, VideoPresets, Track, VideoQuality } from "livekit-client";
 
 // Beautiful custom React component to render a LiveKit Track using standard attach/detach APIs
 function LiveKitTrackRenderer({ track }: { track: any }) {
@@ -423,6 +423,12 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
     streamQualityRef.current = streamQuality;
   }, [streamQuality]);
 
+  const [viewerRequestedQuality, setViewerRequestedQuality] = useState<'low' | 'medium' | 'high'>('medium');
+  const viewerRequestedQualityRef = useRef(viewerRequestedQuality);
+  useEffect(() => {
+    viewerRequestedQualityRef.current = viewerRequestedQuality;
+  }, [viewerRequestedQuality]);
+
   const handleQualityChange = async (quality: 'low' | 'medium' | 'high') => {
     setStreamQuality(quality);
     if (isLocalSharing) {
@@ -430,6 +436,27 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
         ...prev,
         quality: quality
       }));
+    }
+  };
+
+  const handleViewerQualityChange = (quality: 'low' | 'medium' | 'high') => {
+    setViewerRequestedQuality(quality);
+    if (livekitRoomRef.current) {
+      livekitRoomRef.current.remoteParticipants.forEach((participant) => {
+        participant.videoTrackPublications.forEach((pub) => {
+          if (pub.isSubscribed) {
+            let lq = VideoQuality.MEDIUM;
+            if (quality === 'low') lq = VideoQuality.LOW;
+            if (quality === 'high') lq = VideoQuality.HIGH;
+            try {
+              (pub as any).setVideoQuality(lq);
+              console.log(`Setting subscribed video quality to ${quality} for publication ${pub.trackSid}`);
+            } catch (err) {
+              console.warn("Could not set receiver video quality:", err);
+            }
+          }
+        });
+      });
     }
   };
 
@@ -522,8 +549,18 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                   isLive: true,
                   streamer: participant.identity || "ارائه‌دهنده",
                   title: "پخش زنده تالار کوچک",
-                  quality: "medium"
+                  quality: viewerRequestedQualityRef.current
                 });
+                if (publication) {
+                  let lq = VideoQuality.MEDIUM;
+                  if (viewerRequestedQualityRef.current === 'low') lq = VideoQuality.LOW;
+                  if (viewerRequestedQualityRef.current === 'high') lq = VideoQuality.HIGH;
+                  try {
+                    (publication as any).setVideoQuality(lq);
+                  } catch (e) {
+                    console.warn("Error setting initial quality:", e);
+                  }
+                }
               } else if (track.kind === "audio") {
                 const element = track.attach();
                 element.id = `livekit-audio-${participant.sid}-${track.sid}`;
@@ -1720,7 +1757,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
 
                     <div className="flex gap-2">
                       <span className="bg-black/85 text-zinc-400 text-[9px] font-mono px-2.5 py-1 rounded-full shadow border border-zinc-900">
-                        کیفیت: {streamStatus.quality === 'high' ? '1080p' : streamStatus.quality === 'low' ? '360p' : '720p'}
+                        کیفیت: {viewerRequestedQuality === 'high' ? '1080p' : viewerRequestedQuality === 'low' ? '360p' : '720p'}
                       </span>
                     </div>
                   </div>
@@ -1753,24 +1790,7 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                 </div>
               )}
 
-              {/* Frame statistics or controls */}
-              {streamStatus.isLive && (
-                <div className="absolute bottom-4 left-4 right-4 bg-zinc-950/80 backdrop-blur-md border border-zinc-900 rounded-2xl p-3 flex items-center justify-between text-xs z-10" dir="rtl">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] bg-red-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase">LIVE</span>
-                    <span className="text-zinc-400">فرستنده: <strong className="text-white">{streamStatus.streamer}</strong></span>
-                  </div>
 
-                  <div className="text-zinc-500 text-[10px] hidden sm:block">
-                    روش: آپلود مستقیم فریم JPEG روی وب سرور
-                  </div>
-
-                  <div className="flex items-center gap-2 text-zinc-400">
-                    <Eye className="w-4 h-4 text-red-500" />
-                    <span className="font-mono text-[11px]">انتقال سروری غیر P2P</span>
-                  </div>
-                </div>
-              )}
 
             </div>
 
@@ -1834,6 +1854,45 @@ export default function MangaStream({ currentUser, onBack }: MangaStreamProps) {
                     {isStreamMuted ? "0%" : `${Math.round(streamVolume * 100)}%`}
                   </span>
                 </div>
+
+                {/* Viewer Quality Selector */}
+                {streamStatus.isLive && !isLocalSharing && (
+                  <div className="flex items-center gap-2 bg-zinc-900/60 px-3 py-1.5 rounded-xl border border-zinc-800">
+                    <span className="text-[10px] text-zinc-400 font-bold">کیفیت دریافت:</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleViewerQualityChange('low')}
+                        className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold transition-all cursor-pointer ${
+                          viewerRequestedQuality === 'low'
+                            ? 'bg-rose-950 text-rose-400 border border-rose-900/30'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        360p
+                      </button>
+                      <button
+                        onClick={() => handleViewerQualityChange('medium')}
+                        className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold transition-all cursor-pointer ${
+                          viewerRequestedQuality === 'medium'
+                            ? 'bg-rose-950 text-rose-400 border border-rose-900/30'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        720p
+                      </button>
+                      <button
+                        onClick={() => handleViewerQualityChange('high')}
+                        className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold transition-all cursor-pointer ${
+                          viewerRequestedQuality === 'high'
+                            ? 'bg-rose-950 text-rose-400 border border-rose-900/30'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        1080p
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Instant Replay / 2-Min Clip Capture Button */}
                 <button

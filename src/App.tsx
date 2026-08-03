@@ -6,15 +6,16 @@ import MangaStream from "./components/MangaStream";
 import MangaTimes from "./components/MangaTimes";
 import TalarFile from "./components/TalarFile";
 import TalarBozorgan from "./components/TalarBozorgan";
+import TalarSokhan from "./components/TalarSokhan";
 import QuotesTicker from "./components/QuotesTicker";
 import ProfileModal from "./components/ProfileModal";
 import OnlineUsersModal from "./components/OnlineUsersModal";
-import { LogOut, ShieldAlert, Sparkles, Tv, BookOpen, User as UserIcon, Flame, FolderOpen, Users, MessageSquare, Quote } from "lucide-react";
+import { LogOut, ShieldAlert, Sparkles, Tv, BookOpen, User as UserIcon, Flame, FolderOpen, Users, MessageSquare, Quote, Mic } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<"choice" | "stream" | "times" | "file" | "bozorgan">("choice");
+  const [activeTab, setActiveTab] = useState<"choice" | "stream" | "times" | "file" | "bozorgan" | "sokhan">("choice");
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isOnlineUsersOpen, setIsOnlineUsersOpen] = useState<boolean>(false);
@@ -103,6 +104,7 @@ export default function App() {
       {activeTab === "times" && <MangaTimes currentUser={user} onBack={() => setActiveTab("choice")} />}
       {activeTab === "file" && <TalarFile currentUser={user} onBack={() => setActiveTab("choice")} />}
       {activeTab === "bozorgan" && <TalarBozorgan currentUser={user} onBack={() => setActiveTab("choice")} />}
+      {activeTab === "sokhan" && <TalarSokhan currentUser={user} onBack={() => setActiveTab("choice")} />}
 
       {activeTab === "choice" && (
         <div className="min-h-screen bg-black text-[#f3f4f6] font-sans relative overflow-hidden flex flex-col justify-between selection:bg-purple-600/30 pb-10 pt-8">
@@ -196,12 +198,12 @@ export default function App() {
                 کدام تالار را انتخاب می‌کنید؟
               </h2>
               <p className="text-xs md:text-sm text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-                از بخش تالار نمایش برای استریم، تالار زمان برای اشتراک‌گذاری فیلم و عکس، تالار فایل برای آپلود اسناد، و تالار بزرگان برای ثبت سخنان ماندگار و چت گروهی استفاده کنید.
+                از بخش تالار نمایش برای استریم، تالار زمان برای اشتراک‌گذاری فیلم و عکس، تالار فایل برای آپلود اسناد، تالار بزرگان برای ثبت سخنان ماندگار، و تالار سخن برای گفتگوی صوتی و تصویری گروهی استفاده کنید.
               </p>
             </div>
 
-            {/* Responsive grid with 4 choice triggers */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full">
+            {/* Responsive grid with 5 choice triggers */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 w-full">
               
               {/* TALAR NAMAYESH BUTTON */}
               <motion.div
@@ -329,6 +331,40 @@ export default function App() {
                   <div className="flex items-center gap-1.5 bg-purple-950/60 text-purple-300 border border-purple-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] animate-pulse">
                     <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
                     <span>{viewers.bozorg} فعال</span>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* TALAR SOKHAN BUTTON */}
+              <motion.div
+                whileHover={{ y: -5, scale: 1.01 }}
+                onClick={() => setActiveTab("sokhan")}
+                className="group relative bg-zinc-950/80 backdrop-blur-xl border border-zinc-900 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-72 cursor-pointer overflow-hidden text-right"
+              >
+                {/* Background Light Accent */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-600/5 rounded-full blur-3xl group-hover:bg-sky-600/10 transition-all"></div>
+
+                <div className="space-y-3.5 relative z-10">
+                  <div className="w-12 h-12 rounded-xl bg-sky-950/40 border border-sky-900/40 flex items-center justify-center text-sky-400 shadow group-hover:scale-105 transition-transform duration-300">
+                    <Mic className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-sky-400 font-black tracking-widest font-mono uppercase">VOICE & WEBCAM CHAT</span>
+                    <h3 className="text-lg font-bold text-white mt-0.5 group-hover:text-sky-300 transition-colors">تالار سخن</h3>
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    گفتگوی صوتی زنده و اشتراک‌گذاری وب‌کم در کنار صدا با اعضای تالار پادشاهان.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60 relative z-10">
+                  <span className="text-xs font-bold text-sky-400 group-hover:translate-x-[-4px] transition-transform flex items-center gap-1.5" dir="ltr">
+                    <span>ورود به تالار سخن</span>
+                    <span>←</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 bg-sky-950/60 text-sky-300 border border-sky-900/30 px-2 py-0.5 rounded-full font-bold text-[9px] animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                    <span>اتاق سخن صوتی</span>
                   </div>
                 </div>
               </motion.div>
